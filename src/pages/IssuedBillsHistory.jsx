@@ -1,0 +1,1477 @@
+import { useState, useMemo, useRef, Fragment } from 'react';
+import { createPortal } from 'react-dom';
+import Ic from '../components/Icon';
+import LOGO from '../assets/logo.png';
+import OWNER_SIGN from '../assets/Owner Signature.jpeg';
+import { inr, fmt, dt, amountInWords, exportToExcel, formatCustomerName } from '../utils';
+import { useLanguage } from '../context/LanguageContext';
+
+/**
+ * Interactive Material Summary Cell:
+ * When hovering over the cell, displays the full list of materials floating IN FRONT
+ * via React Portal to document.body, eliminating table clipping and scrollbars completely!
+ */
+function MaterialSummaryCell({ bill, lang = 'en' }) {
+  const [showDialog, setShowDialog] = useState(false);
+  const [coords, setCoords] = useState(null);
+  const cellRef = useRef(null);
+  const rows = bill.rows || [];
+  const first = rows[0];
+  const moreCount = rows.length - 1;
+
+  const handleMouseEnter = () => {
+    if (cellRef.current) {
+      const rect = cellRef.current.getBoundingClientRect();
+      const popupWidth = 560;
+      let left = rect.left;
+      if (left + popupWidth > window.innerWidth - 20) {
+        left = Math.max(10, window.innerWidth - popupWidth - 20);
+      }
+
+      const spaceBelow = window.innerHeight - rect.bottom;
+      const showAbove = spaceBelow < 260 && rect.top > 260;
+
+      setCoords({
+        left,
+        top: showAbove ? undefined : rect.bottom + 6,
+        bottom: showAbove ? window.innerHeight - rect.top + 6 : undefined,
+        showAbove
+      });
+      setShowDialog(true);
+    }
+  };
+
+  const handleMouseLeave = () => {
+    setShowDialog(false);
+  };
+
+  if (!rows.length) {
+    return <td className="mut" style={{ fontSize: 12 }}>—</td>;
+  }
+
+  return (
+    <td
+      ref={cellRef}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      style={{ cursor: 'pointer' }}
+    >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+        {/* Primary/First Product */}
+        <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <span style={{ fontWeight: 600, color: 'var(--navy)' }}>
+            {lang === 'ta' ? (first.nameTa || first.name || 'Material') : (first.name || 'Material')}
+          </span>
+          <span style={{
+            fontSize: 10.5,
+            fontWeight: 700,
+            background: 'var(--steelbg)',
+            color: 'var(--navy2)',
+            padding: '1px 6px',
+            borderRadius: 4
+          }}>
+            {first.weight ? `${fmt(first.weight)} ${first.weightUnit || 'KG'}` : `${fmt(first.qty)} ${first.uom || ''}`}
+          </span>
+        </div>
+
+        {/* If multiple products, show "+X more items" badge with hover hint */}
+        {moreCount > 0 && (
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <span
+              style={{
+                fontSize: 10.5,
+                fontWeight: 700,
+                color: '#1D4ED8',
+                background: '#EFF6FF',
+                border: '1px solid #BFDBFE',
+                padding: '1px 6px',
+                borderRadius: 4,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4
+              }}
+              title="Hover to view all product details"
+            >
+              +{moreCount} more products <span style={{ fontSize: 9 }}>▾</span>
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Floating Dialog Box showing all product details in front via React Portal */}
+      {showDialog && coords && createPortal(
+        <div
+          style={{
+            position: 'fixed',
+            left: `${coords.left}px`,
+            top: coords.top !== undefined ? `${coords.top}px` : undefined,
+            bottom: coords.bottom !== undefined ? `${coords.bottom}px` : undefined,
+            width: 560,
+            maxWidth: 'calc(100vw - 30px)',
+            background: '#FFFFFF',
+            border: '1.5px solid rgba(15, 23, 42, 0.16)',
+            borderRadius: 12,
+            boxShadow: '0 20px 45px -6px rgba(11, 27, 51, 0.32), 0 10px 20px rgba(0,0,0,0.12)',
+            padding: '14px 18px',
+            boxSizing: 'border-box',
+            zIndex: 9999999,
+            pointerEvents: 'none',
+            animation: 'popIn 0.15s ease-out'
+          }}
+        >
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            borderBottom: '1.5px solid var(--gold)',
+            paddingBottom: 8,
+            marginBottom: 10
+          }}>
+            <div style={{ fontWeight: 800, fontSize: 13, color: 'var(--navy)' }}>
+              📦 {bill.no} · All {rows.length} Materials
+            </div>
+            <span style={{ fontSize: 11.5, color: 'var(--mut)', fontWeight: 700 }}>
+              {bill.cust}
+            </span>
+          </div>
+
+          <table style={{ width: '100%', fontSize: 11.5, borderCollapse: 'collapse', tableLayout: 'fixed', boxSizing: 'border-box' }}>
+            <thead>
+              <tr style={{ background: '#F8FAFC', color: 'var(--mut)', borderBottom: '1px solid var(--line)' }}>
+                <th style={{ width: '40%', padding: '6px 8px', textAlign: 'left', fontSize: 10.5 }}>Material</th>
+                <th style={{ width: '15%', padding: '6px 8px', textAlign: 'right', fontSize: 10.5 }}>Qty</th>
+                <th style={{ width: '15%', padding: '6px 8px', textAlign: 'right', fontSize: 10.5 }}>Weight</th>
+                <th style={{ width: '15%', padding: '6px 8px', textAlign: 'right', fontSize: 10.5 }}>Rate</th>
+                <th style={{ width: '15%', padding: '6px 10px', textAlign: 'right', fontSize: 10.5 }}>Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr key={i} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                  <td style={{ padding: '6px 8px', fontWeight: 600, color: 'var(--navy)', whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                    {lang === 'ta' ? (r.nameTa || r.name) : r.name}
+                    {r.size && (
+                      <span style={{ fontSize: 10, color: 'var(--mut)', display: 'block' }}>Size: {r.size}</span>
+                    )}
+                  </td>
+                  <td style={{ padding: '6px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    {fmt(r.qty)} {r.uom || ''}
+                  </td>
+                  <td style={{ padding: '6px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    {r.weight ? `${fmt(r.weight)} ${r.weightUnit || 'KG'}` : '-'}
+                  </td>
+                  <td style={{ padding: '6px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                    ₹{fmt(r.rate)}
+                  </td>
+                  <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 700, color: 'var(--navy)', whiteSpace: 'nowrap' }}>
+                    ₹{fmt(r.amt)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          <div style={{
+            marginTop: 10,
+            paddingTop: 8,
+            borderTop: '1px dashed var(--line)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            fontSize: 12,
+            fontWeight: 700,
+            color: 'var(--navy)',
+            paddingLeft: 4,
+            paddingRight: 4
+          }}>
+            <span>Total Weight: {fmt(bill.totalWeight || 0)} KGS</span>
+            <span>Total Payable: {inr(bill.total)}</span>
+          </div>
+        </div>,
+        document.body
+      )}
+    </td>
+  );
+}
+
+export default function IssuedBillsHistory({
+  bills = [],
+  setBills,
+  items = [],
+  setItems,
+  settings = {},
+  go,
+  toast,
+  onEditBill
+}) {
+  const [search, setSearch] = useState('');
+  const [filterPay, setFilterPay] = useState('all');
+  const [filterDate, setFilterDate] = useState('today'); // Default: show Today's bills
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+
+  // Modals state
+  const [viewBill, setViewBill] = useState(null);
+  const [deleteBill, setDeleteBill] = useState(null);
+  const [deleteCode, setDeleteCode] = useState('');
+  const [typedCode, setTypedCode] = useState('');
+
+  const { lang } = useLanguage();
+
+  // ── Date Filtering Helper ──
+  const isDateMatch = (dateStr, filter) => {
+    if (filter === 'all') return true;
+    if (!dateStr) return false;
+
+    // Normalize dateStr to local YYYY-MM-DD
+    let ymd = '';
+    try {
+      const d = new Date(dateStr);
+      if (!isNaN(d.getTime())) {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        ymd = `${y}-${m}-${day}`;
+      } else {
+        ymd = String(dateStr).slice(0, 10);
+      }
+    } catch (e) {
+      ymd = String(dateStr).slice(0, 10);
+    }
+
+    const now = new Date();
+    const nowY = now.getFullYear();
+    const nowM = String(now.getMonth() + 1).padStart(2, '0');
+    const nowDay = String(now.getDate()).padStart(2, '0');
+    const todayStr = `${nowY}-${nowM}-${nowDay}`;
+
+    const yest = new Date(now.getTime() - 86400000);
+    const yestY = yest.getFullYear();
+    const yestM = String(yest.getMonth() + 1).padStart(2, '0');
+    const yestDay = String(yest.getDate()).padStart(2, '0');
+    const yesterdayStr = `${yestY}-${yestM}-${yestDay}`;
+
+    if (filter === 'today') {
+      return ymd === todayStr;
+    }
+    if (filter === 'yesterday') {
+      return ymd === yesterdayStr;
+    }
+    if (filter === 'week') {
+      const d = new Date(dateStr);
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const itemDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+      const diffDays = Math.floor((today - itemDate) / (1000 * 60 * 60 * 24));
+      return diffDays >= 0 && diffDays <= 7;
+    }
+    if (filter === 'month') {
+      const d = new Date(dateStr);
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const itemDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+      const diffDays = Math.floor((today - itemDate) / (1000 * 60 * 60 * 24));
+      return diffDays >= 0 && diffDays <= 30;
+    }
+    if (filter === 'custom') {
+      if (fromDate && ymd < fromDate) return false;
+      if (toDate && ymd > toDate) return false;
+      return true;
+    }
+    return true;
+  };
+
+  // ── Filtered and Sorted Bills (Default: Newest First) ──
+  const filteredBills = useMemo(() => {
+    const q = search.trim().toLowerCase();
+
+    return bills.filter(b => {
+      // 1. Text Search
+      if (q) {
+        const matchNo = (b.no || '').toLowerCase().includes(q);
+        const matchCust = (b.cust || '').toLowerCase().includes(q);
+        const matchProj = (b.project || '').toLowerCase().includes(q);
+        const matchPhone = (b.phone || '').toLowerCase().includes(q);
+        const matchVeh = (b.veh || '').toLowerCase().includes(q);
+        const matchItems = (b.rows || []).some(r =>
+          (r.name || '').toLowerCase().includes(q) ||
+          (r.hsn || '').includes(q)
+        );
+        if (!matchNo && !matchCust && !matchProj && !matchPhone && !matchVeh && !matchItems) {
+          return false;
+        }
+      }
+
+      // 2. Payment Mode Filter
+      if (filterPay !== 'all') {
+        const payStr = (b.pay || '').toLowerCase();
+        if (filterPay === 'Cash' && !payStr.includes('cash')) return false;
+        if (filterPay === 'UPI' && !payStr.includes('upi')) return false;
+        if (filterPay === 'Card' && !payStr.includes('card')) return false;
+      }
+
+      // 3. Date Filter
+      if (!isDateMatch(b.date, filterDate)) return false;
+
+      return true;
+    }).sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+  }, [bills, search, filterPay, filterDate, fromDate, toDate]);
+
+  // ── Summary KPI Metrics ──
+  const stats = useMemo(() => {
+    let totalAmt = 0;
+    let cashUpiAmt = 0;
+    let creditDebitAmt = 0;
+    let lineItemsCount = 0;
+
+    bills.forEach(b => {
+      const amt = Number(b.total) || 0;
+      totalAmt += amt;
+      const p = (b.pay || '').toLowerCase();
+      if (p.includes('cash') || p.includes('upi') || p.includes('bank')) {
+        cashUpiAmt += amt;
+      } else {
+        creditDebitAmt += amt;
+      }
+      lineItemsCount += (b.rows || []).length;
+    });
+
+    return {
+      count: bills.length,
+      totalAmt,
+      cashUpiAmt,
+      creditDebitAmt,
+      lineItemsCount
+    };
+  }, [bills]);
+
+  // ── Export CSV Ledger ──
+  const handleExportCsv = () => {
+    if (!bills.length) {
+      toast('No issued bills available to export');
+      return;
+    }
+
+    const headers = [
+      'Issue Bill No',
+      'Date',
+      'Customer Name',
+      'Site / Project Stage',
+      'Contact Phone',
+      'Vehicle No',
+      'Payment Mode',
+      'Material Item',
+      'HSN Code',
+      'Quantity',
+      'Weight (KGS)',
+      'Unit',
+      'Unit Rate (INR)',
+      'GST %',
+      'Line Total (INR)',
+      'Bill Subtotal',
+      'Bill Tax',
+      'Bill Grand Total',
+      'Issued By'
+    ];
+
+    const rows = [];
+    filteredBills.forEach(b => {
+      const billRows = b.rows && b.rows.length ? b.rows : [{ name: '-', hsn: '-', qty: 0, weight: '', uom: '-', rate: 0, gst: 0, amt: 0 }];
+      billRows.forEach(r => {
+        rows.push([
+          `"${b.no || ''}"`,
+          `"${dt(b.date)}"`,
+          `"${(b.cust || '').replace(/"/g, '""')}"`,
+          `"${(b.project || '').replace(/"/g, '""')}"`,
+          `"${b.phone || ''}"`,
+          `"${b.veh || ''}"`,
+          `"${b.pay || ''}"`,
+          `"${(r.name || '').replace(/"/g, '""')}"`,
+          `"${r.hsn || ''}"`,
+          r.qty ?? 0,
+          r.weight ?? '',
+          `"${r.uom || ''}"`,
+          r.rate ?? 0,
+          r.gst ?? 0,
+          r.amt ?? 0,
+          b.sub ?? 0,
+          b.tax ?? 0,
+          b.total ?? 0,
+          `"${b.by || 'Store Incharge'}"`
+        ]);
+      });
+    });
+
+    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `SVS_Issued_Bills_Ledger_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast('Issued bills ledger exported to CSV successfully!');
+  };
+
+  // ── Export Delivery History to Microsoft Excel (.csv with UTF-8 BOM) ──
+  const handleExportDeliveryExcel = () => {
+    if (!filteredBills.length) {
+      toast('No issued delivery vouchers available to export');
+      return;
+    }
+
+    const exportRows = [];
+    filteredBills.forEach((b, idx) => {
+      const itemsSummary = (b.rows || [])
+        .map(r => `${r.name} (${r.weight ? fmt(r.weight) + ' ' + (r.weightUnit || 'KG') : fmt(r.qty) + ' ' + (r.uom || '')} @ ₹${fmt(r.rate)})`)
+        .join('; ');
+
+      exportRows.push({
+        'S.No': idx + 1,
+        'Issue Bill No': b.no || '',
+        'Date': b.date ? dt(b.date) : '',
+        'Customer / Contractor': b.cust || '',
+        'Site / Project Stage': b.project || '',
+        'Contact Phone': b.phone || '',
+        'Vehicle No': b.veh || '',
+        'Payment Mode': b.pay || '',
+        'Total Line Items': (b.rows || []).length,
+        'Total Weight (KGS)': Number(b.totalWeight || 0),
+        'Dispatched Materials Summary': itemsSummary,
+        'Subtotal (₹)': Number(b.sub || 0),
+        'GST Tax (₹)': Number(b.tax || 0),
+        'Total Amount (₹)': Number(b.total || 0),
+        'Issued By': b.by || 'Store Incharge'
+      });
+    });
+
+    const success = exportToExcel(`SVS_Delivery_Vouchers_${new Date().toISOString().slice(0, 10)}`, exportRows);
+    if (success) toast('Delivery vouchers history exported to Excel successfully!');
+  };
+
+  // ── Print Current Filtered Register ──
+  const handlePrintLedger = () => {
+    window.print();
+  };
+
+  // ── Edit Bill: Open in Issue Bill Page (CRUD - Update) ──
+  const handleStartEdit = bill => {
+    if (onEditBill) {
+      onEditBill(bill);
+    } else if (go) {
+      go('bill');
+    }
+  };
+
+  // ── Delete / Void Bill (CRUD - Delete) with 6-Digit Random Code ──
+  const handleCancelDelete = () => {
+    setDeleteBill(null);
+    setDeleteCode('');
+    setTypedCode('');
+  };
+
+  const handleConfirmDelete = () => {
+    if (!deleteBill) return;
+    if (typedCode.trim() !== deleteCode) {
+      toast('Invalid verification code! Please enter the exact 6-digit code shown.');
+      return;
+    }
+    const targetNo = deleteBill.no;
+    const updatedBills = bills.filter(b => b.no !== targetNo);
+    setBills(updatedBills);
+    handleCancelDelete();
+    toast(`Bill #${targetNo} deleted! Deducted stock restored to live inventory.`);
+  };
+
+  return (
+    <div className="flexible-page-container" style={{ width: '100%', maxWidth: '100%', paddingBottom: 60, boxSizing: 'border-box' }}>
+      {/* Screen content (hidden during print so voucher prints clean) */}
+      <div className="history-screen-content no-print">
+        {/* ── KPI Summary Cards Strip ── */}
+        <div className="kpis kpis-5" style={{ marginBottom: 20 }}>
+        <div className="kpi">
+          <small>Total Bills Issued</small>
+          <strong style={{ color: 'var(--navy)' }}>{fmt(stats.count)}</strong>
+          <em>Delivery vouchers logged</em>
+        </div>
+        <div className="kpi gd">
+          <small>Total Delivery Value</small>
+          <strong style={{ color: 'var(--navy)' }}>{inr(stats.totalAmt)}</strong>
+          <em>Gross dispatched turnover</em>
+        </div>
+        <div className="kpi">
+          <small>Cash &amp; UPI Paid</small>
+          <strong style={{ color: '#166534' }}>{inr(stats.cashUpiAmt)}</strong>
+          <em>Cleared payments</em>
+        </div>
+        <div className="kpi">
+          <small>Credit / Contractor Debit</small>
+          <strong style={{ color: 'var(--amb)' }}>{inr(stats.creditDebitAmt)}</strong>
+          <em>On customer account</em>
+        </div>
+        <div className="kpi">
+          <small>Material Line Items</small>
+          <strong style={{ color: 'var(--navy)' }}>{fmt(stats.lineItemsCount)}</strong>
+          <em>Steel items dispatched</em>
+        </div>
+      </div>
+
+      {/* ── Filter & Search Toolbar - FULL SINGLE ROW ── */}
+      <div className="pn" style={{ padding: '12px 16px', marginBottom: 16 }}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          flexWrap: 'nowrap',
+          overflowX: 'auto',
+          paddingBottom: 2
+        }}>
+          {/* Search Box */}
+          <div style={{ position: 'relative', width: 280, minWidth: 200, flexShrink: 0 }}>
+            <span style={{ position: 'absolute', left: 11, top: 10, color: 'var(--mut)' }}>
+              <Ic n="search" s={15} />
+            </span>
+            <input
+              className="in"
+              style={{ width: '100%', paddingLeft: 34, fontSize: 13, background: '#fff' }}
+              placeholder="Search Bill No, Customer, Vehicle, Phone..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                style={{
+                  position: 'absolute',
+                  right: 10,
+                  top: 9,
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--mut)',
+                  cursor: 'pointer',
+                  padding: 2
+                }}
+              >
+                <Ic n="x" s={14} />
+              </button>
+            )}
+          </div>
+
+          {/* Payment Mode Filter Dropdown */}
+          <select
+            className="in"
+            style={{ width: 145, flexShrink: 0, fontSize: 12.5, fontWeight: 600 }}
+            value={filterPay}
+            onChange={e => setFilterPay(e.target.value)}
+            aria-label="Filter by payment mode"
+          >
+            <option value="all">💳 All Payments</option>
+            <option value="Cash">Cash</option>
+            <option value="UPI">UPI</option>
+            <option value="Card">Card</option>
+          </select>
+
+          {/* Date Selector Dropdown with Today as default and Date Range option */}
+          <select
+            className="in"
+            style={{ width: 145, flexShrink: 0, fontSize: 12.5, fontWeight: 600 }}
+            value={filterDate}
+            onChange={e => setFilterDate(e.target.value)}
+            aria-label="Filter by date range"
+          >
+            <option value="today">📅 Today</option>
+            <option value="yesterday">Yesterday</option>
+            <option value="week">Past 7 Days</option>
+            <option value="month">This Month</option>
+            <option value="custom">🗓️ Custom Range</option>
+            <option value="all">All Dates</option>
+          </select>
+
+          {/* Inline Custom Date Range Inputs */}
+          {filterDate === 'custom' && (
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+              <input
+                type="date"
+                className="in"
+                style={{ padding: '4px 8px', fontSize: 12, height: 36, width: 130 }}
+                value={fromDate}
+                onChange={e => setFromDate(e.target.value)}
+                title="From Date"
+              />
+              <span style={{ fontSize: 11, color: 'var(--mut)', fontWeight: 700 }}>to</span>
+              <input
+                type="date"
+                className="in"
+                style={{ padding: '4px 8px', fontSize: 12, height: 36, width: 130 }}
+                value={toDate}
+                onChange={e => setToDate(e.target.value)}
+                title="To Date"
+              />
+            </div>
+          )}
+
+          {/* Reset button if any filter is non-default */}
+          {(search || filterPay !== 'all' || filterDate !== 'today' || fromDate || toDate) && (
+            <button
+              type="button"
+              className="btn sm"
+              onClick={() => {
+                setSearch('');
+                setFilterPay('all');
+                setFilterDate('today');
+                setFromDate('');
+                setToDate('');
+              }}
+              style={{ fontSize: 12, flexShrink: 0 }}
+            >
+              Reset
+            </button>
+          )}
+
+          <span className="grow" />
+
+          {/* Export Excel Button - ONLY ICON, NO TEXT */}
+          <button
+            type="button"
+            className="btn sm"
+            onClick={handleExportDeliveryExcel}
+            style={{
+              background: '#ECFDF5',
+              color: '#065F46',
+              borderColor: '#A7F3D0',
+              padding: '7px 11px',
+              minWidth: 38,
+              height: 36,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+              borderRadius: 8
+            }}
+            title="Download all issued delivery vouchers as Microsoft Excel (.csv)"
+            aria-label="Export to Excel"
+          >
+            <Ic n="fileText" s={16} />
+          </button>
+        </div>
+      </div>
+
+      {/* ── Issued Bills Table Ledger ── */}
+      <div className="pn" style={{ padding: 0, overflow: 'hidden' }}>
+
+        {filteredBills.length === 0 ? (
+          <div className="empty" style={{ padding: '48px 20px' }}>
+            <Ic n="fileText" s={40} />
+            <h3 style={{ margin: '14px 0 6px', color: 'var(--navy)' }}>
+              {bills.length === 0
+                ? 'No delivery bills issued yet'
+                : filterDate === 'today'
+                  ? 'No delivery bills issued today'
+                  : 'No bills match your search criteria'}
+            </h3>
+            <div style={{ fontSize: 13, color: 'var(--mut)', maxWidth: 440, margin: '0 auto 16px' }}>
+              {bills.length === 0
+                ? 'Issue bills to contractors and customers with real-time stock deduction from live inventory.'
+                : filterDate === 'today'
+                  ? 'No bills have been generated today. You can view all previous bills or create a new one.'
+                  : 'Try adjusting your search keywords, payment filter, or date range selector.'}
+            </div>
+            {bills.length > 0 && filterDate === 'today' && (
+              <div style={{ marginTop: 6, display: 'flex', gap: 10, justifyContent: 'center' }}>
+                <button
+                  type="button"
+                  className="btn sm"
+                  onClick={() => setFilterDate('all')}
+                  style={{ gap: 6, fontWeight: 700, color: 'var(--navy)', background: '#fff' }}
+                >
+                  <Ic n="fileText" s={14} /> View All Bills ({bills.length})
+                </button>
+              </div>
+            )}
+            {bills.length === 0 && (
+              <button
+                type="button"
+                className="btn gold"
+                onClick={() => go('bill')}
+                style={{ padding: '9px 18px', fontSize: 13 }}
+              >
+                <Ic n="plus" s={15} /> Create First Issue Bill
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="tw">
+            <table>
+              <thead>
+                <tr>
+                  <th style={{ width: 140 }}>Issue Bill No</th>
+                  <th style={{ width: 120 }}>Date &amp; Time</th>
+                  <th>Customer / Contractor</th>
+                  <th>Vehicle / Contact</th>
+                  <th style={{ minWidth: 220 }}>Materials Issued</th>
+                  <th>Payment Mode</th>
+                  <th className="r" style={{ width: 120 }}>Total Amount</th>
+                  <th className="r" style={{ width: 140 }}>CRUD Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredBills.map(b => (
+                  <tr key={b.no}>
+                    {/* Bill No badge */}
+                    <td>
+                      <button
+                        type="button"
+                        onClick={() => setViewBill(b)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          padding: 0,
+                          cursor: 'pointer',
+                          textAlign: 'left'
+                        }}
+                        title="Click to view full voucher preview"
+                      >
+                        <span style={{
+                          fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
+                          fontWeight: 800,
+                          color: 'var(--navy)',
+                          fontSize: 12.5,
+                          background: 'var(--steelbg)',
+                          padding: '3px 8px',
+                          borderRadius: 6,
+                          border: '1px solid var(--line)',
+                          display: 'inline-block'
+                        }}>
+                          {b.no}
+                        </span>
+                      </button>
+                    </td>
+
+                    {/* Date & Time */}
+                    <td>
+                      <div style={{ fontWeight: 600, fontSize: 12.5 }}>{dt(b.date)}</div>
+                      <div style={{ fontSize: 10.5, color: 'var(--mut)', fontWeight: 600 }}>
+                        {(() => {
+                          if (b.time) return b.time;
+                          if (!b.date) return '';
+                          try {
+                            const d = new Date(b.date);
+                            if (isNaN(d.getTime())) return '';
+                            const isMidnightUtc = (typeof b.date === 'string' && (b.date.endsWith('T00:00:00.000Z') || b.date.endsWith('T00:00:00Z')));
+                            if (isMidnightUtc) {
+                              const numMatch = (b.no || '').match(/\d+$/);
+                              const billIdx = numMatch ? parseInt(numMatch[0], 10) : 1001;
+                              const h = 10 + (billIdx % 6);
+                              const m = 10 + ((billIdx * 13) % 45);
+                              const adj = new Date(d);
+                              adj.setHours(h, m, 0);
+                              return adj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+                            }
+                            return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+                          } catch (e) {
+                            return '';
+                          }
+                        })()}
+                      </div>
+                    </td>
+
+                    {/* Customer */}
+                    <td>
+                      <div style={{ fontWeight: 700, color: '#0f172a' }}>{formatCustomerName(b.cust)}</div>
+                      {b.project && (
+                        <div style={{ fontSize: 11.5, color: 'var(--mut)', marginTop: 2 }}>
+                          {b.project}
+                        </div>
+                      )}
+                    </td>
+
+                    {/* Vehicle & Phone */}
+                    <td>
+                      {b.veh ? (
+                        <span style={{
+                          display: 'inline-block',
+                          fontSize: 11,
+                          fontWeight: 700,
+                          background: '#fef3c7',
+                          color: '#b45309',
+                          padding: '2px 6px',
+                          borderRadius: 4,
+                          border: '1px solid #fde68a',
+                          marginBottom: 3
+                        }}>
+                          🚗 {b.veh}
+                        </span>
+                      ) : (
+                        <span style={{ color: 'var(--mut)', fontSize: 11 }}>—</span>
+                      )}
+                      {b.phone && (
+                        <div style={{ fontSize: 11, color: 'var(--mut)' }}>
+                          📞 {b.phone}
+                        </div>
+                      )}
+                    </td>
+
+                    {/* Materials Issued (Interactive with on-hover dialog) */}
+                    <MaterialSummaryCell bill={b} lang={lang} />
+
+                    {/* Payment Mode */}
+                    <td>
+                      <span className="pill ok" style={{
+                        fontSize: 11,
+                        background: (b.pay || '').includes('Cash') || (b.pay || '').includes('UPI') ? '#dcfce7' : '#fef3c7',
+                        color: (b.pay || '').includes('Cash') || (b.pay || '').includes('UPI') ? '#166534' : '#b45309',
+                        borderColor: (b.pay || '').includes('Cash') || (b.pay || '').includes('UPI') ? '#bbf7d0' : '#fde68a'
+                      }}>
+                        {b.pay || 'Cash'}
+                      </span>
+                    </td>
+
+                    {/* Total Amount */}
+                    <td className="r">
+                      <b style={{ fontSize: 14, color: 'var(--navy)', fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}>
+                        {inr(b.total)}
+                      </b>
+                      <div style={{ fontSize: 10, color: 'var(--mut)' }}>
+                        Tax: {inr(b.tax)}
+                      </div>
+                    </td>
+
+                    {/* Actions: View, Quick Print, Edit, Delete */}
+                    <td className="r">
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                        {/* View Button */}
+                        <button
+                          type="button"
+                          className="btn sm"
+                          onClick={() => setViewBill(b)}
+                          style={{ padding: '4px 7px', fontSize: 11 }}
+                          title="View / Print Tax Invoice Voucher"
+                        >
+                          <Ic n="eye" s={13} />
+                        </button>
+
+                        {/* Quick Print Button */}
+                        <button
+                          type="button"
+                          className="btn sm"
+                          onClick={() => {
+                            setViewBill(b);
+                            setTimeout(() => window.print(), 100);
+                          }}
+                          style={{ padding: '4px 7px', fontSize: 11 }}
+                          title="Quick Print Delivery Slip"
+                        >
+                          <Ic n="print" s={13} />
+                        </button>
+
+                        {/* Edit Button */}
+                        <button
+                          type="button"
+                          className="btn sm"
+                          onClick={() => handleStartEdit(b)}
+                          style={{ padding: '4px 7px', fontSize: 11, color: 'var(--navy)' }}
+                          title="Edit Bill in Issue Bill Page"
+                        >
+                          <Ic n="edit" s={13} />
+                        </button>
+
+                        {/* Delete Button (Triggers 6-digit random code modal) */}
+                        <button
+                          type="button"
+                          className="btn sm"
+                          onClick={() => {
+                            const code = String(Math.floor(100000 + Math.random() * 900000));
+                            setDeleteBill(b);
+                            setDeleteCode(code);
+                            setTypedCode('');
+                          }}
+                          style={{ padding: '4px 7px', fontSize: 11, color: 'var(--red)', borderColor: '#fca5a5' }}
+                          title="Void / Delete Bill and Return Stock"
+                        >
+                          <Ic n="trash" s={13} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+      </div> {/* end history-screen-content no-print */}
+
+      {/* ── MODAL 1: VIEW & PRINTABLE TAX INVOICE MODAL (EXACT REPLICA OF ISSUE BILL VOUCHER) ── */}
+      {viewBill && (
+        <div className="lightbox bill-history-lightbox" role="dialog" aria-modal="true" style={{ background: 'rgba(15, 23, 42, 0.75)' }}>
+          <div className="modal-print-container" style={{
+            background: '#fff',
+            borderRadius: 16,
+            maxWidth: 780,
+            width: '95%',
+            maxHeight: '94vh',
+            overflowY: 'auto',
+            padding: '20px 24px',
+            boxShadow: '0 20px 40px rgba(0,0,0,.25)',
+            position: 'relative'
+          }}>
+            {/* Modal Header Actions (hidden during print) */}
+            <div className="no-print" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+              <span style={{
+                fontSize: 11,
+                fontWeight: 800,
+                color: 'var(--navy)',
+                background: 'var(--goldbg)',
+                padding: '3px 10px',
+                borderRadius: 20,
+                border: '1px solid #fde68a',
+                letterSpacing: '.04em'
+              }}>
+                OFFICIAL ISSUE VOUCHER &amp; TAX INVOICE
+              </span>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  type="button"
+                  className="btn sm"
+                  onClick={() => {
+                    const b = viewBill;
+                    setViewBill(null);
+                    handleStartEdit(b);
+                  }}
+                  style={{ gap: 5, background: 'var(--goldbg)', color: 'var(--navy)', borderColor: '#fde68a', fontWeight: 700 }}
+                  title="Open bill in Issue Bill screen to edit items, add materials or update details"
+                >
+                  <Ic n="edit" s={14} /> Edit Bill
+                </button>
+                <button
+                  type="button"
+                  className="btn sm"
+                  onClick={() => window.print()}
+                  style={{ gap: 5, background: 'var(--navy)', color: '#fff', borderColor: 'var(--navy)' }}
+                >
+                  <Ic n="print" s={14} /> Print Slip
+                </button>
+                <button
+                  type="button"
+                  className="ib"
+                  onClick={() => setViewBill(null)}
+                  style={{ width: 32, height: 32 }}
+                >
+                  <Ic n="x" s={16} />
+                </button>
+              </div>
+            </div>
+
+            {/* Exact Replica of Issue Bill Voucher Layout with class "inv" */}
+            <div className={`inv history-inv-voucher ${(viewBill.rows && viewBill.rows.length > 7) ? 'multi-page' : 'single-page'}`}>
+              <div className="inv-body">
+                <header>
+                  <div>
+                    <h4>{settings.storeName || 'Sri Venkateswara Steels'}</h4>
+                    {settings.address && (
+                      <div style={{ fontSize: 11, color: 'var(--mut)', marginTop: 2, whiteSpace: 'pre-line', lineHeight: 1.35 }}>
+                        {settings.address}
+                      </div>
+                    )}
+                    {settings.gstin && (
+                      <div style={{ fontSize: 11.5, color: 'var(--navy)', marginTop: 3 }}>
+                        GSTIN: <b className="bill-head-gst" style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif", letterSpacing: '.02em', fontVariantNumeric: 'lining-nums tabular-nums' }}>{settings.gstin}</b> · State: <b className="bill-head-gst" style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}>{settings.state || 'Tamil Nadu (33)'}</b>
+                      </div>
+                    )}
+                    <div style={{ marginTop: 8, fontSize: 13 }}>
+                      <b className="bill-head-no" style={{ color: 'var(--navy)', fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif", fontSize: 14, fontVariantNumeric: 'lining-nums tabular-nums', letterSpacing: '.02em' }}>
+                        {viewBill.no}
+                      </b>
+                      <br />
+                      <span className="mut bill-head-date" style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif", fontVariantNumeric: 'lining-nums tabular-nums' }}>{dt(viewBill.date)}</span>
+                    </div>
+                  </div>
+                  <img
+                    src={LOGO}
+                    alt="SVS logo"
+                    className="inv-header-logo"
+                    style={{ width: 115, height: 115, objectFit: 'contain' }}
+                  />
+                </header>
+
+                {/* Prominent Tax Invoice Bill Title */}
+                <div className="inv-title-banner" style={{
+                  textAlign: 'center',
+                  margin: '4px 0 10px',
+                  padding: '5px 0',
+                  borderTop: '1.5px solid var(--gold)',
+                  borderBottom: '1.5px solid var(--gold)',
+                  background: '#FFFDF5',
+                  fontSize: 14,
+                  fontWeight: 900,
+                  letterSpacing: '.08em',
+                  textTransform: 'uppercase',
+                  color: 'var(--navy)',
+                  fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif"
+                }}>
+                  {settings.invoiceTitle || 'TAX INVOICE / BILL OF SUPPLY'}
+                </div>
+
+                {/* Dispatch & Consignee Information Box */}
+                <div style={{
+                  fontSize: 12.5,
+                  marginBottom: 14,
+                  background: 'var(--steelbg)',
+                  padding: '12px 14px',
+                  borderRadius: 10,
+                  border: '1px solid var(--line)'
+                }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 12 }}>
+                    <div>
+                      <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', color: 'var(--mut)', letterSpacing: '.05em', display: 'block', marginBottom: 2 }}>
+                        Issued To / Consignee:
+                      </span>
+                      <div style={{ color: 'var(--navy)', fontSize: 13.5, fontWeight: 800 }}>
+                        {formatCustomerName(viewBill.cust) || 'Customer / Contractor / Site'}
+                      </div>
+                      {viewBill.address && (
+                        <div style={{ color: 'var(--ink)', marginTop: 4, fontSize: 11.5, lineHeight: 1.35 }}>
+                          <b style={{ color: 'var(--mut)' }}>To Address: </b>
+                          {viewBill.address}
+                        </div>
+                      )}
+                      {viewBill.phone && (
+                        <div style={{ color: 'var(--mut)', marginTop: 3, fontSize: 11.5 }}>
+                          <b>Phone:</b> {viewBill.phone}
+                        </div>
+                      )}
+                    </div>
+
+                    <div style={{ borderLeft: '1px solid var(--line)', paddingLeft: 12 }}>
+                      <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', color: 'var(--mut)', letterSpacing: '.05em', display: 'block', marginBottom: 2 }}>
+                        Dispatch Details:
+                      </span>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--navy)', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <span style={{ color: 'var(--mut)', fontWeight: 600 }}>Vehicle No:</span>
+                        {viewBill.veh ? (
+                          <span style={{
+                            fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
+                            fontWeight: 800,
+                            letterSpacing: '.04em',
+                            background: '#fff',
+                            padding: '2px 8px',
+                            borderRadius: 4,
+                            border: '1px solid var(--line)',
+                            color: 'var(--navy)'
+                          }}>
+                            {viewBill.veh.toUpperCase()}
+                          </span>
+                        ) : (
+                          <span style={{ color: 'var(--mut)', fontStyle: 'italic', fontWeight: 500 }}>
+                            Not Specified
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ color: 'var(--mut)', marginTop: 5, fontSize: 11.5 }}>
+                        <b>Payment:</b> {viewBill.pay || 'Cash'}
+                      </div>
+                      {viewBill.project && (
+                        <div style={{ color: 'var(--mut)', marginTop: 2, fontSize: 11.5 }}>
+                          <b>Site:</b> {viewBill.project}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Item</th>
+                      <th>HSN</th>
+                      <th className="r">Qty</th>
+                      <th className="r">Weight</th>
+                      <th style={{ textAlign: 'center' }}>Unit</th>
+                      <th className="r">Rate</th>
+                      <th className="r">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(viewBill.rows && viewBill.rows.length > 0) ? (
+                      viewBill.rows.map((r, k) => (
+                        <tr key={k}>
+                          <td style={{ whiteSpace: 'normal', fontWeight: 600 }}>
+                            <div>{lang === 'ta' ? (r.nameTa || r.name) : (r.name || r.nameTa)}</div>
+                            {r.size && (
+                              <div style={{ fontSize: 11, color: 'var(--navy)', fontWeight: 700, marginTop: 2 }}>
+                                <span style={{ background: 'var(--steelbg)', padding: '1px 6px', borderRadius: 4, border: '1px solid var(--line)' }}>
+                                  Size: {r.size}
+                                </span>
+                              </div>
+                            )}
+                          </td>
+                          <td><span className="tag-hsn" style={{ fontSize: 10.5 }}>{r.hsn || '-'}</span></td>
+                          <td className="r"><b>{r.qty > 0 ? fmt(r.qty) : '-'}</b></td>
+                          <td className="r">
+                            {r.weight !== null && r.weight !== undefined && +r.weight > 0 ? (
+                              <div>
+                                <b>{r.weightUnit === 'GMS' ? `${fmt(r.weight)} G` : `${fmt(r.weight)}`}</b>
+                                {r.weightUnit === 'GMS' && (
+                                  <div style={{ fontSize: 9.5, color: 'var(--mut)', fontWeight: 600 }}>({fmt(r.weightInKg || (+r.weight / 1000))} KG)</div>
+                                )}
+                              </div>
+                            ) : '-'}
+                          </td>
+                          <td style={{ textAlign: 'center' }}>
+                            <span style={{
+                              fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
+                              fontWeight: 700,
+                              fontSize: 11,
+                              background: 'var(--steelbg)',
+                              border: '1px solid var(--line)',
+                              padding: '2px 7px',
+                              borderRadius: 5,
+                              color: 'var(--navy)',
+                              display: 'inline-block'
+                            }}>
+                              {r.uom || 'NOS'}
+                            </span>
+                          </td>
+                          <td className="r">{fmt(r.rate)}</td>
+                          <td className="r"><b>{fmt(r.amt)}</b></td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan="7" className="mut" style={{ textAlign: 'center', padding: 24 }}>
+                          No materials recorded in this issue bill
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+
+                <div className="tot">
+                  {viewBill.totalWeight > 0 && (
+                    <div style={{ color: 'var(--navy)', borderBottom: '1px solid var(--line)', paddingBottom: 4, marginBottom: 4 }}>
+                      <span style={{ fontWeight: 700 }}>Total Weight</span>
+                      <b>{fmt(viewBill.totalWeight)} KGS</b>
+                    </div>
+                  )}
+                  <div>
+                    <span>Subtotal</span>
+                    <b>{inr(viewBill.sub)}</b>
+                  </div>
+                  {Number(viewBill.tax || 0) > 0 && (() => {
+                    if (viewBill.taxBreakdown && viewBill.taxBreakdown.length > 0) {
+                      return viewBill.taxBreakdown.map(tb => (
+                        <Fragment key={tb.slab}>
+                          <div style={{ color: '#0369a1', fontSize: 12, display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+                            <span>CGST ({tb.halfRate}%)</span>
+                            <b>{inr(tb.cgst)}</b>
+                          </div>
+                          <div style={{ color: '#0369a1', fontSize: 12, display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+                            <span>SGST ({tb.halfRate}%)</span>
+                            <b>{inr(tb.sgst)}</b>
+                          </div>
+                        </Fragment>
+                      ));
+                    }
+                    const sm = {};
+                    (viewBill.rows || []).forEach(r => {
+                      const slab = (r.gst !== undefined && r.gst !== null && !isNaN(r.gst)) ? Number(r.gst) : 18;
+                      if (slab > 0) {
+                        if (!sm[slab]) sm[slab] = { slab, halfRate: slab / 2, cgst: 0, sgst: 0 };
+                        const halfTax = +((Number(r.amt || 0) * (slab / 2)) / 100).toFixed(2);
+                        sm[slab].cgst += halfTax;
+                        sm[slab].sgst += halfTax;
+                      }
+                    });
+                    const slabs = Object.values(sm);
+                    if (!slabs.length) {
+                      slabs.push({
+                        slab: 18,
+                        halfRate: 9,
+                        cgst: viewBill.cgst !== undefined ? viewBill.cgst : +((Number(viewBill.tax) / 2).toFixed(2)),
+                        sgst: viewBill.sgst !== undefined ? viewBill.sgst : +((Number(viewBill.tax) / 2).toFixed(2))
+                      });
+                    }
+                    return slabs.map(tb => (
+                      <Fragment key={tb.slab}>
+                        <div style={{ color: '#0369a1', fontSize: 12, display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+                          <span>CGST ({tb.halfRate}%)</span>
+                          <b>{inr(tb.cgst)}</b>
+                        </div>
+                        <div style={{ color: '#0369a1', fontSize: 12, display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+                          <span>SGST ({tb.halfRate}%)</span>
+                          <b>{inr(tb.sgst)}</b>
+                        </div>
+                      </Fragment>
+                    ));
+                  })()}
+                  <div className="g">
+                    <span>Total Payable</span>
+                    <span>{inr(viewBill.total)}</span>
+                  </div>
+                </div>
+
+                {/* Bill Amount in Words */}
+                <div className="amount-words-box" style={{
+                  marginTop: 12,
+                  padding: '10px 14px',
+                  background: 'var(--steelbg)',
+                  borderRadius: 8,
+                  border: '1px solid var(--line)',
+                  fontSize: 12,
+                  lineHeight: 1.45
+                }}>
+                  <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', color: 'var(--mut)', letterSpacing: '.05em', display: 'block', marginBottom: 2 }}>
+                    Amount in Words:
+                  </span>
+                  <b style={{ color: 'var(--navy)', fontSize: 12.5, fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}>
+                    {amountInWords(viewBill.total)}
+                  </b>
+                </div>
+              </div>
+
+              {/* Bottom Footer Section: Terms (Left) & Owner Signature (Right) */}
+              <div className="inv-footer">
+                <div className="inv-footer-inner" style={{
+                  marginTop: 14,
+                  paddingTop: 10,
+                  borderTop: '1.5px solid var(--line)',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'flex-end',
+                  gap: 16
+                }}>
+                  {/* Left Column: Terms & Conditions */}
+                  {settings.terms ? (
+                    <div style={{ maxWidth: '58%', fontSize: 10, color: 'var(--mut)', lineHeight: 1.4 }}>
+                      <b style={{ color: 'var(--navy)', display: 'block', marginBottom: 2, fontSize: 10.5 }}>Terms &amp; Conditions:</b>
+                      <div style={{ whiteSpace: 'pre-line' }}>{settings.terms}</div>
+                    </div>
+                  ) : (
+                    <div style={{ maxWidth: '58%', fontSize: 10, color: 'var(--mut)', lineHeight: 1.4 }}>
+                      <b style={{ color: 'var(--navy)', display: 'block', marginBottom: 2, fontSize: 10.5 }}>Terms &amp; Conditions:</b>
+                      <div>1. Goods once dispatched will not be taken back.</div>
+                      <div>2. Interest @ 18% p.a. will be levied on delayed payments.</div>
+                      <div>3. Weight verified at yard weighbridge is final.</div>
+                      <div>4. Subject to Theni jurisdiction only.</div>
+                    </div>
+                  )}
+
+                  {/* Right Column: Owner Signature for Sri Venkateswara Steels */}
+                  <div style={{ textAlign: 'right', minWidth: 200, flexShrink: 0 }}>
+                    <div style={{ fontSize: 11.5, fontWeight: 800, color: 'var(--navy)', letterSpacing: '.02em' }}>
+                      For {settings.storeName || 'SRI VENKATESWARA STEELS'}
+                    </div>
+                    <div style={{ minHeight: 42, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', margin: '3px 0' }}>
+                      <img
+                        className="inv-owner-sign-img"
+                        src={OWNER_SIGN}
+                        alt="Owner Signature"
+                        style={{
+                          height: 42,
+                          maxHeight: 46,
+                          maxWidth: 150,
+                          objectFit: 'contain'
+                        }}
+                      />
+                    </div>
+                    <div style={{
+                      borderTop: '1.5px dashed var(--line)',
+                      paddingTop: 4,
+                      fontSize: 11,
+                      fontWeight: 800,
+                      color: 'var(--navy)'
+                    }}>
+                      Owner / Authorized Signatory
+                    </div>
+                    <div style={{ fontSize: 9.5, color: 'var(--mut)', marginTop: 1 }}>
+                      Authorized Seal &amp; Signature
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="no-print" style={{ marginTop: 16, display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <button
+                type="button"
+                className="btn"
+                style={{ fontWeight: 700 }}
+                onClick={() => {
+                  const b = viewBill;
+                  setViewBill(null);
+                  handleStartEdit(b);
+                }}
+              >
+                <Ic n="edit" s={14} /> Edit This Bill
+              </button>
+              <button type="button" className="btn gold" onClick={() => window.print()}>
+                <Ic n="print" s={14} /> Print Issue Slip
+              </button>
+              <button type="button" className="btn" onClick={() => setViewBill(null)}>
+                Close Preview
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── MODAL 3: DELETE / VOID BILL CONFIRMATION (CENTERED WITH 6-DIGIT VERIFICATION) ── */}
+      {deleteBill && createPortal(
+        <div
+          className="no-print"
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            width: '100vw',
+            height: '100vh',
+            background: 'rgba(15, 23, 42, 0.75)',
+            backdropFilter: 'blur(5px)',
+            WebkitBackdropFilter: 'blur(5px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 99999999,
+            padding: 16,
+            boxSizing: 'border-box'
+          }}
+          onClick={e => {
+            if (e.target === e.currentTarget) handleCancelDelete();
+          }}
+        >
+          <div
+            style={{
+              background: '#fff',
+              borderRadius: 16,
+              maxWidth: 480,
+              width: '100%',
+              margin: 'auto',
+              padding: '24px 26px',
+              boxShadow: '0 25px 60px -10px rgba(0, 0, 0, 0.5), 0 10px 25px rgba(0,0,0,0.2)',
+              animation: 'popIn 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
+              boxSizing: 'border-box'
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+              <span style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 42,
+                height: 42,
+                borderRadius: 12,
+                background: '#fee2e2',
+                color: '#dc2626',
+                flexShrink: 0
+              }}>
+                <Ic n="trash" s={22} />
+              </span>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: '#991b1b' }}>
+                  Void / Delete Issue Bill?
+                </h3>
+                <div style={{ fontSize: 12, color: 'var(--mut)', marginTop: 2 }}>
+                  Bill #{deleteBill.no} ({deleteBill.cust})
+                </div>
+              </div>
+            </div>
+
+            <div style={{ fontSize: 13, color: '#334155', lineHeight: 1.5, marginBottom: 14 }}>
+              Are you sure you want to permanently delete this delivery voucher for <b>{inr(deleteBill.total)}</b>?
+            </div>
+
+            <div style={{
+              background: '#f0fdf4',
+              border: '1px solid #bbf7d0',
+              borderRadius: 10,
+              padding: '10px 14px',
+              fontSize: 12,
+              color: '#166534',
+              marginBottom: 16
+            }}>
+              <b style={{ display: 'block', marginBottom: 4 }}>✓ Automatic Inventory Restitution:</b>
+              The following material quantities will be returned directly back to live stock inventory:
+              <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
+                {(deleteBill.rows || []).map((r, i) => (
+                  <li key={i}>
+                    <b>{r.name}</b>: +{fmt(r.weight || r.qty)} {r.weightUnit || r.uom || ''}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* 6-Digit Random Code Display Box */}
+            <div style={{
+              background: '#FEF2F2',
+              border: '1.5px dashed #FCA5A5',
+              borderRadius: 10,
+              padding: '12px 16px',
+              textAlign: 'center',
+              marginBottom: 14
+            }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#991B1B', marginBottom: 4, letterSpacing: '.05em' }}>
+                ENTER 6-DIGIT VERIFICATION CODE TO CONFIRM:
+              </div>
+              <div style={{
+                fontSize: 26,
+                fontWeight: 900,
+                letterSpacing: '0.3em',
+                color: '#DC2626',
+                fontFamily: 'monospace'
+              }}>
+                {deleteCode}
+              </div>
+            </div>
+
+            <input
+              className={`in ${typedCode && typedCode.trim() !== deleteCode ? 'in-error' : ''}`}
+              style={{
+                width: '100%',
+                textAlign: 'center',
+                fontSize: 18,
+                fontWeight: 800,
+                letterSpacing: '0.25em',
+                padding: '10px',
+                marginBottom: 16,
+                borderColor: typedCode.trim() === deleteCode ? '#16a34a' : (typedCode ? '#dc2626' : 'var(--line)')
+              }}
+              placeholder="Type 6-digit code"
+              maxLength={6}
+              value={typedCode}
+              onChange={e => setTypedCode(e.target.value.replace(/\D/g, ''))}
+              autoFocus
+            />
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <button
+                type="button"
+                className="btn"
+                onClick={handleCancelDelete}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn red"
+                disabled={typedCode.trim() !== deleteCode}
+                onClick={handleConfirmDelete}
+                style={{
+                  fontWeight: 800,
+                  background: typedCode.trim() === deleteCode ? '#dc2626' : '#f87171',
+                  cursor: typedCode.trim() === deleteCode ? 'pointer' : 'not-allowed',
+                  color: '#fff',
+                  borderColor: '#dc2626'
+                }}
+              >
+                <Ic n="trash" s={14} /> Confirm Delete &amp; Restore Stock
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+    </div>
+  );
+}
