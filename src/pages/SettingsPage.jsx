@@ -4,6 +4,27 @@ import LOGO from '../assets/logo.png';
 import { inr, fmt, KEY } from '../utils';
 import { useLanguage } from '../context/LanguageContext';
 
+const CURRENT_APP_VERSION = 'v2.4.0';
+const GITHUB_REPO = 'Rajesh4027/Sri_Venkateswara_Steels';
+
+function parseSemVer(v) {
+  if (!v) return [0, 0, 0];
+  const clean = String(v).replace(/^v/i, '').trim();
+  const parts = clean.split('.').map(p => parseInt(p, 10) || 0);
+  while (parts.length < 3) parts.push(0);
+  return parts;
+}
+
+function isNewerVersion(remote, local) {
+  const r = parseSemVer(remote);
+  const l = parseSemVer(local);
+  for (let i = 0; i < 3; i++) {
+    if (r[i] > l[i]) return true;
+    if (r[i] < l[i]) return false;
+  }
+  return false;
+}
+
 export default function SettingsPage({
   settings,
   setSettings,
@@ -319,20 +340,124 @@ export default function SettingsPage({
     e.target.value = '';
   };
 
-  // ── Software Update Check Simulator ──
-  const handleCheckUpdates = () => {
+  // ── Software Update Check from GitHub Releases API ──
+  const [downloadingUpdate, setDownloadingUpdate] = useState(false);
+  const [downloadPercent, setDownloadPercent] = useState(0);
+
+  const handleCheckUpdates = async () => {
     setCheckingUpdate(true);
     setUpdateStatus(null);
-    setTimeout(() => {
+
+    try {
+      let releaseData = null;
+
+      // 1. Try via Electron API
+      if (window.electronAPI?.checkGitHubRelease) {
+        try {
+          const elRes = await window.electronAPI.checkGitHubRelease();
+          if (elRes && elRes.success && elRes.release) {
+            releaseData = elRes.release;
+          }
+        } catch (e) { }
+      }
+
+      // 2. Direct fetch to GitHub releases API
+      if (!releaseData) {
+        const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, {
+          headers: { Accept: 'application/vnd.github.v3+json' }
+        });
+        if (res.ok) {
+          releaseData = await res.json();
+        }
+      }
+
+      // 3. Fallback via raw package.json to avoid rate limits
+      if (!releaseData) {
+        try {
+          const rawRes = await fetch(`https://raw.githubusercontent.com/${GITHUB_REPO}/main/package.json?t=${Date.now()}`);
+          if (rawRes.ok) {
+            const rawPkg = await rawRes.json();
+            if (rawPkg.version) {
+              releaseData = { tag_name: `v${rawPkg.version}`, assets: [] };
+            }
+          }
+        } catch (e) { }
+      }
+
+      setCheckingUpdate(false);
+
+      if (releaseData && releaseData.tag_name) {
+        const remoteTag = releaseData.tag_name;
+        const activeVer = localStorage.getItem('svs_app_version') || CURRENT_APP_VERSION;
+        const isNew = isNewerVersion(remoteTag, activeVer);
+
+        let setupUrl = '';
+        if (Array.isArray(releaseData.assets) && releaseData.assets.length > 0) {
+          const asset = releaseData.assets.find(a =>
+            a.name && a.name.includes('Setup') && a.name.endsWith('.exe')
+          ) || releaseData.assets.find(a => a.name && a.name.endsWith('.exe'));
+          if (asset && asset.browser_download_url) setupUrl = asset.browser_download_url;
+        }
+        if (!setupUrl) {
+          setupUrl = `https://github.com/${GITHUB_REPO}/releases/download/${remoteTag}/Sri.Venkateswara.Steels.Setup.${remoteTag.replace(/^v/, '')}.exe`;
+        }
+
+        setUpdateStatus({
+          upToDate: !isNew,
+          isNew,
+          version: remoteTag,
+          setupUrl,
+          checkedAt: new Date().toLocaleTimeString(),
+          notes: isNew
+            ? `New release ${remoteTag} is available! Click 'Update & Restart Now' to download and install automatically.`
+            : `You are on the latest release (${CURRENT_APP_VERSION}). All steel GST Chapter 72 & 73 compliance tax rules are up to date.`
+        });
+
+        if (isNew) {
+          toast(`🚀 New update ${remoteTag} is available!`);
+        } else {
+          toast(`✓ Sri Venkateswara Steels ERP is up to date (${CURRENT_APP_VERSION})!`);
+        }
+      } else {
+        setUpdateStatus({
+          upToDate: true,
+          version: CURRENT_APP_VERSION,
+          checkedAt: new Date().toLocaleTimeString(),
+          notes: `You are on the latest release (${CURRENT_APP_VERSION}). All steel GST Chapter 72 & 73 compliance tax rules are up to date.`
+        });
+        toast(`✓ Running ${CURRENT_APP_VERSION}`);
+      }
+    } catch (err) {
       setCheckingUpdate(false);
       setUpdateStatus({
         upToDate: true,
-        version: form.appVersion || 'v2.4.0',
+        version: CURRENT_APP_VERSION,
         checkedAt: new Date().toLocaleTimeString(),
-        notes: 'You are on the latest release. All steel GST Chapter 72 & 73 compliance tax rules are up to date.'
+        notes: `You are on release ${CURRENT_APP_VERSION}. All steel GST Chapter 72 & 73 compliance tax rules are up to date.`
       });
-      toast('Software is up to date! Version 2.4.0');
-    }, 1200);
+      toast(`✓ Running ${CURRENT_APP_VERSION}`);
+    }
+  };
+
+  const handleInstallFromSettings = async (url) => {
+    if (!url || downloadingUpdate) return;
+    setDownloadingUpdate(true);
+    setDownloadPercent(0);
+
+    if (window.electronAPI?.downloadAndInstallUpdate) {
+      const unsub = window.electronAPI.onDownloadProgress((p) => {
+        setDownloadPercent(p);
+      });
+      const res = await window.electronAPI.downloadAndInstallUpdate(url);
+      if (unsub) unsub();
+      if (!res?.success) {
+        setDownloadingUpdate(false);
+        window.open(url, '_blank');
+      }
+    } else {
+      window.open(url, '_blank');
+      setDownloadingUpdate(false);
+    }
   };
 
   const handleTestPrint = () => {
@@ -883,7 +1008,7 @@ export default function SettingsPage({
                   Installed Software Version
                 </div>
                 <div style={{ fontSize: 13.5, fontWeight: 700, color: '#0f172a', marginTop: 2 }}>
-                  {form.storeName || 'Sri Venkateswara Steels'} ERP v2.4.0 (Windows x64)
+                  {form.storeName || 'Sri Venkateswara Steels'} ERP {CURRENT_APP_VERSION} (Windows x64)
                 </div>
               </div>
               <span style={{
@@ -903,15 +1028,49 @@ export default function SettingsPage({
 
             {updateStatus && (
               <div style={{
-                background: '#f0fdf4',
-                border: '1px solid #bbf7d0',
-                borderRadius: 10,
-                padding: '10px 14px',
+                background: updateStatus.isNew ? '#fffbeb' : '#f0fdf4',
+                border: updateStatus.isNew ? '1.5px solid #f59e0b' : '1px solid #bbf7d0',
+                borderRadius: 12,
+                padding: '14px 16px',
                 fontSize: 12.5,
-                color: '#166534',
+                color: updateStatus.isNew ? '#92400e' : '#166534',
                 marginBottom: 12
               }}>
-                <b>✓ Checked at {updateStatus.checkedAt}:</b> {updateStatus.notes}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontWeight: 800, fontSize: 13, marginBottom: 4 }}>
+                  <span>{updateStatus.isNew ? '🚀 Update Ready:' : '✓ Up-to-Date:'}</span>
+                  <span>{updateStatus.version}</span>
+                  <span style={{ fontSize: 11, color: '#64748b', fontWeight: 500, marginLeft: 'auto' }}>Checked at {updateStatus.checkedAt}</span>
+                </div>
+                <div style={{ lineHeight: 1.5, marginBottom: updateStatus.isNew ? 10 : 0 }}>
+                  {updateStatus.notes}
+                </div>
+                {updateStatus.isNew && updateStatus.setupUrl && (
+                  <button
+                    type="button"
+                    disabled={downloadingUpdate}
+                    onClick={() => handleInstallFromSettings(updateStatus.setupUrl)}
+                    style={{
+                      marginTop: 8,
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                      padding: '10px 14px',
+                      background: 'linear-gradient(135deg, #d97706, #b45309)',
+                      color: '#ffffff',
+                      border: 'none',
+                      borderRadius: 8,
+                      fontSize: 13,
+                      fontWeight: 800,
+                      cursor: downloadingUpdate ? 'wait' : 'pointer',
+                      boxShadow: '0 2px 8px rgba(217,119,6,.3)'
+                    }}
+                  >
+                    <Ic n="download" s={15} />
+                    {downloadingUpdate ? `Downloading Installer (${downloadPercent}%)...` : `Download & Install Update (${updateStatus.version})`}
+                  </button>
+                )}
               </div>
             )}
 

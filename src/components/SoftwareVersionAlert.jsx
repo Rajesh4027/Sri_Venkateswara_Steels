@@ -23,7 +23,7 @@ function isNewerVersion(remote, local) {
   return false;
 }
 
-const CURRENT_APP_VERSION = 'v2.3.0';
+const CURRENT_APP_VERSION = 'v2.4.0';
 const GITHUB_REPO = 'Rajesh4027/Sri_Venkateswara_Steels';
 const GITHUB_RELEASES_API = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
 
@@ -85,54 +85,90 @@ export default function SoftwareVersionAlert({ settings = {}, toast, style = {},
     } catch (e) { }
   }, [toast]);
 
-  // Periodic GitHub releases API check engine (initial + every 20s)
+  // Periodic GitHub releases API check engine (every 10 seconds)
   useEffect(() => {
     let isMounted = true;
 
     const runCheck = async () => {
       try {
         const activeVer = localStorage.getItem('svs_app_version') || CURRENT_APP_VERSION;
-        const res = await fetch(GITHUB_RELEASES_API, {
-          headers: { Accept: 'application/vnd.github.v3+json' }
-        });
+        let releaseData = null;
 
-        if (!res.ok) {
-          // If GitHub rate limit or offline, check against current targetVersion
-          if (isMounted && isNewerVersion(targetVersion, activeVer)) {
-            setUpdateAvailable(true);
-          }
-          return;
+        // 1. Try via Electron API
+        if (window.electronAPI?.checkGitHubRelease) {
+          try {
+            const elRes = await window.electronAPI.checkGitHubRelease();
+            if (elRes && elRes.success && elRes.release) {
+              releaseData = elRes.release;
+            }
+          } catch (e) { }
         }
 
-        const data = await res.json();
-        const remoteTag = data.tag_name || '';
+        // 2. Try direct fetch to GitHub REST API
+        if (!releaseData) {
+          const res = await fetch(GITHUB_RELEASES_API, {
+            headers: { Accept: 'application/vnd.github.v3+json' }
+          });
+          if (res.ok) {
+            releaseData = await res.json();
+          }
+        }
+
+        // 3. Fallback: try raw package.json to avoid rate limits
+        if (!releaseData) {
+          try {
+            const rawRes = await fetch(`https://raw.githubusercontent.com/${GITHUB_REPO}/main/package.json?t=${Date.now()}`);
+            if (rawRes.ok) {
+              const rawPkg = await rawRes.json();
+              if (rawPkg.version) {
+                releaseData = {
+                  tag_name: `v${rawPkg.version}`,
+                  assets: []
+                };
+              }
+            }
+          } catch (e) { }
+        }
 
         if (!isMounted) return;
 
-        if (remoteTag && isNewerVersion(remoteTag, activeVer)) {
-          setTargetVersion(remoteTag);
-          setUpdateAvailable(true);
+        if (releaseData && releaseData.tag_name) {
+          const remoteTag = releaseData.tag_name;
+          if (isNewerVersion(remoteTag, activeVer)) {
+            setTargetVersion(remoteTag);
+            setUpdateAvailable(true);
 
-          if (Array.isArray(data.assets) && data.assets.length > 0) {
-            const setupAsset = data.assets.find(a =>
-              a.name && (a.name.endsWith('Setup.exe') || a.name.endsWith('.exe'))
-            );
-            if (setupAsset && setupAsset.browser_download_url) {
-              setDownloadUrl(setupAsset.browser_download_url);
+            // Locate Windows Setup executable asset
+            let setupUrl = '';
+            if (Array.isArray(releaseData.assets) && releaseData.assets.length > 0) {
+              const setupAsset = releaseData.assets.find(a =>
+                a.name && a.name.includes('Setup') && a.name.endsWith('.exe')
+              ) || releaseData.assets.find(a => a.name && a.name.endsWith('.exe'));
+              if (setupAsset && setupAsset.browser_download_url) {
+                setupUrl = setupAsset.browser_download_url;
+              }
             }
-          }
+            if (!setupUrl) {
+              setupUrl = `https://github.com/${GITHUB_REPO}/releases/download/${remoteTag}/Sri.Venkateswara.Steels.Setup.${remoteTag.replace(/^v/, '')}.exe`;
+            }
+            setDownloadUrl(setupUrl);
 
-          if (!hasAlerted) {
-            setHasAlerted(true);
-            if (toast) {
-              toast(`🔔 Software Update Alert: ${remoteTag} is available! Click to update.`);
+            if (!hasAlerted) {
+              setHasAlerted(true);
+              if (toast) {
+                toast(`🔔 Software Update Alert: ${remoteTag} is available! Click to update.`);
+              }
             }
+          } else {
+            setUpdateAvailable(false);
           }
         } else {
-          setUpdateAvailable(false);
+          // If offline or quiet check against current targetVersion
+          if (isMounted && isNewerVersion(targetVersion, activeVer)) {
+            setUpdateAvailable(true);
+          }
         }
       } catch (err) {
-        // Fallback for offline environments
         const activeVer = localStorage.getItem('svs_app_version') || CURRENT_APP_VERSION;
         if (isMounted && isNewerVersion(targetVersion, activeVer)) {
           setUpdateAvailable(true);
@@ -140,11 +176,11 @@ export default function SoftwareVersionAlert({ settings = {}, toast, style = {},
       }
     };
 
-    // Initial check after 800ms
-    const initialTimer = setTimeout(runCheck, 800);
+    // Initial check after 500ms
+    const initialTimer = setTimeout(runCheck, 500);
 
-    // Recurring check every 20 seconds
-    const intervalTimer = setInterval(runCheck, 20000);
+    // Recurring check every 10 seconds exactly as requested
+    const intervalTimer = setInterval(runCheck, 10000);
 
     return () => {
       isMounted = false;
@@ -175,7 +211,7 @@ export default function SoftwareVersionAlert({ settings = {}, toast, style = {},
   }, [toast]);
 
   // Handle clicking the update button: shrink ring progress animation from 0% to 100%
-  const handleStartUpdate = () => {
+  const handleStartUpdate = async () => {
     if (isUpdating || isRestarting) return;
 
     if (!updateAvailable) {
@@ -188,7 +224,39 @@ export default function SoftwareVersionAlert({ settings = {}, toast, style = {},
     setIsUpdating(true);
     setDownloadProgress(0);
 
-    // Smooth progress steps from 0% to 100% with the circular shrink ring
+    // If running in packaged Electron desktop app with live downloader IPC
+    if (window.electronAPI?.downloadAndInstallUpdate && downloadUrl) {
+      const unsub = window.electronAPI.onDownloadProgress((p) => {
+        setDownloadProgress(p);
+      });
+
+      try {
+        const result = await window.electronAPI.downloadAndInstallUpdate(downloadUrl);
+        if (unsub) unsub();
+
+        if (result && result.success) {
+          setIsUpdating(false);
+          setIsRestarting(true);
+          try {
+            localStorage.setItem('svs_app_version', targetVersion);
+            localStorage.setItem('svs_just_installed_update', targetVersion);
+          } catch (e) { }
+        } else {
+          setIsUpdating(false);
+          if (toast) {
+            toast(`Update error: ${result?.error || 'Could not download update'}. Opening download link.`);
+          }
+          if (downloadUrl) window.open(downloadUrl, '_blank');
+        }
+      } catch (err) {
+        if (unsub) unsub();
+        setIsUpdating(false);
+        if (downloadUrl) window.open(downloadUrl, '_blank');
+      }
+      return;
+    }
+
+    // Web / browser / fallback mode: smooth progress steps from 0% to 100%
     const steps = [
       { progress: 14, time: 250 },
       { progress: 28, time: 550 },
