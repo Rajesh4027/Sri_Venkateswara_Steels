@@ -1,4 +1,4 @@
-# Sri Venkateswara Steels – ERP & Desktop Software v2.6.0
+# Sri Venkateswara Steels – ERP & Desktop Software v2.7.0
 
 Official ERP, Inventory Management, Billing & Inward Register application for Sri Venkateswara Steels, Theni.
 
@@ -26,4 +26,4 @@ npm run dist            # Package Windows installer (.exe) & portable desktop ex
 ```
 
 ## Version
-**v2.6.0** — Official Production Release: NSIS Setup Installer with Silent Background Downloader & Setup Launcher.
+**v2.7.0** — Official Production Release: NSIS Setup Installer with Silent Background Downloader & Blue Restart Dialog.
