@@ -23,7 +23,7 @@ function isNewerVersion(remote, local) {
   return false;
 }
 
-const CURRENT_APP_VERSION = 'v2.4.0';
+const CURRENT_APP_VERSION = 'v2.5.0';
 const GITHUB_REPO = 'Rajesh4027/Sri_Venkateswara_Steels';
 const GITHUB_RELEASES_API = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
 
@@ -59,6 +59,7 @@ export default function SoftwareVersionAlert({ settings = {}, toast, style = {},
   const [hasAlerted, setHasAlerted] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
+  const [showRestartModal, setShowRestartModal] = useState(false);
   const [isRestarting, setIsRestarting] = useState(false);
 
   // Sync current build version on mount
@@ -210,9 +211,9 @@ export default function SoftwareVersionAlert({ settings = {}, toast, style = {},
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [toast]);
 
-  // Handle clicking the update button: shrink ring progress animation from 0% to 100%
+  // Handle clicking the update button: download installer in background with progress ring
   const handleStartUpdate = async () => {
-    if (isUpdating || isRestarting) return;
+    if (isUpdating || isRestarting || showRestartModal) return;
 
     if (!updateAvailable) {
       if (toast) {
@@ -225,38 +226,36 @@ export default function SoftwareVersionAlert({ settings = {}, toast, style = {},
     setDownloadProgress(0);
 
     // If running in packaged Electron desktop app with live downloader IPC
-    if (window.electronAPI?.downloadAndInstallUpdate && downloadUrl) {
+    if (window.electronAPI?.downloadUpdate && downloadUrl) {
       const unsub = window.electronAPI.onDownloadProgress((p) => {
         setDownloadProgress(p);
       });
 
       try {
-        const result = await window.electronAPI.downloadAndInstallUpdate(downloadUrl);
+        const result = await window.electronAPI.downloadUpdate(downloadUrl);
         if (unsub) unsub();
 
         if (result && result.success) {
           setIsUpdating(false);
-          setIsRestarting(true);
-          try {
-            localStorage.setItem('svs_app_version', targetVersion);
-            localStorage.setItem('svs_just_installed_update', targetVersion);
-          } catch (e) { }
+          setDownloadProgress(100);
+          setShowRestartModal(true); // Popup restart prompt in front!
         } else {
           setIsUpdating(false);
           if (toast) {
-            toast(`Update error: ${result?.error || 'Could not download update'}. Opening download link.`);
+            toast(`Update error: ${result?.error || 'Could not download update'}.`);
           }
-          if (downloadUrl) window.open(downloadUrl, '_blank');
         }
       } catch (err) {
         if (unsub) unsub();
         setIsUpdating(false);
-        if (downloadUrl) window.open(downloadUrl, '_blank');
+        if (toast) {
+          toast('Error downloading update.');
+        }
       }
       return;
     }
 
-    // Web / browser / fallback mode: smooth progress steps from 0% to 100%
+    // Web / browser / fallback simulation steps
     const steps = [
       { progress: 14, time: 250 },
       { progress: 28, time: 550 },
@@ -271,40 +270,30 @@ export default function SoftwareVersionAlert({ settings = {}, toast, style = {},
       setTimeout(() => {
         setDownloadProgress(progress);
         if (progress === 100) {
-          // If a download URL is available, trigger installer download
-          if (downloadUrl) {
-            try {
-              const a = document.createElement('a');
-              a.href = downloadUrl;
-              a.download = '';
-              a.target = '_blank';
-              document.body.appendChild(a);
-              a.click();
-              document.body.removeChild(a);
-            } catch (e) {
-              window.open(downloadUrl, '_blank');
-            }
-          }
-
-          // Transition to Restarting / Installing Overlay
-          setTimeout(() => {
-            setIsUpdating(false);
-            setIsRestarting(true);
-
-            // Persist the updated version
-            try {
-              localStorage.setItem('svs_app_version', targetVersion);
-              localStorage.setItem('svs_just_installed_update', targetVersion);
-            } catch (e) { }
-
-            // Automatic reload / restart
-            setTimeout(() => {
-              window.location.reload();
-            }, 1800);
-          }, 350);
+          setIsUpdating(false);
+          setShowRestartModal(true);
         }
       }, time);
     });
+  };
+
+  // Launch setup installer in front and close the app so user can click Next & Next
+  const handleConfirmRestartAndInstall = async () => {
+    setShowRestartModal(false);
+    setIsRestarting(true);
+
+    try {
+      localStorage.setItem('svs_app_version', targetVersion);
+      localStorage.setItem('svs_just_installed_update', targetVersion);
+    } catch (e) { }
+
+    if (window.electronAPI?.launchInstallerAndQuit) {
+      await window.electronAPI.launchInstallerAndQuit();
+    } else {
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
+    }
   };
 
   // Circular progress calculations for the shrink ring (Radius = 9, Circumference = 56.55)
@@ -469,6 +458,125 @@ export default function SoftwareVersionAlert({ settings = {}, toast, style = {},
           </>
         )}
       </button>
+
+      {/* ── UPDATE DOWNLOADED CONFIRMATION MODAL (IN FRONT) ── */}
+      {showRestartModal && !isRestarting && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(11, 27, 51, 0.85)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999998,
+            padding: 24,
+            animation: 'fadeIn 0.25s ease-out'
+          }}
+        >
+          <div
+            style={{
+              background: '#FFFFFF',
+              borderRadius: 24,
+              padding: '36px 32px',
+              maxWidth: 440,
+              width: '100%',
+              boxShadow: '0 25px 60px rgba(0,0,0,0.4)',
+              color: '#0B1B33',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              textAlign: 'center'
+            }}
+          >
+            <img
+              src={LOGO}
+              alt="Sri Venkateswara Steels"
+              style={{
+                width: 64,
+                height: 64,
+                borderRadius: 16,
+                objectFit: 'contain',
+                background: '#FFF6DC',
+                padding: 6,
+                border: '1.5px solid #FDE68A',
+                marginBottom: 16,
+                boxShadow: '0 4px 14px rgba(217, 162, 27, 0.25)'
+              }}
+            />
+
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                background: '#FEF3C7',
+                color: '#B45309',
+                fontSize: 12,
+                fontWeight: 800,
+                padding: '4px 12px',
+                borderRadius: 99,
+                marginBottom: 10,
+                letterSpacing: '.02em'
+              }}
+            >
+              <span>🎉</span> DOWNLOAD COMPLETE ({targetVersion})
+            </div>
+
+            <h3 style={{ margin: '0 0 8px', fontSize: 20, fontWeight: 800, color: '#0B1B33' }}>
+              Setup Ready to Install
+            </h3>
+
+            <p style={{ margin: '0 0 24px', fontSize: 13.5, color: '#5F6B7A', lineHeight: 1.5 }}>
+              The new version has finished downloading. Click below to close the app and launch the setup installer. You can simply click <b>Next</b> and <b>Next</b> to complete installation.
+            </p>
+
+            <button
+              type="button"
+              onClick={handleConfirmRestartAndInstall}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                padding: '14px 20px',
+                background: 'linear-gradient(135deg, #D97706, #B45309)',
+                color: '#FFFFFF',
+                border: 'none',
+                borderRadius: 12,
+                fontSize: 14.5,
+                fontWeight: 800,
+                cursor: 'pointer',
+                boxShadow: '0 4px 14px rgba(217, 119, 6, 0.35)',
+                transition: 'all 0.18s ease-in-out',
+                marginBottom: 10
+              }}
+              onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
+              onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
+            >
+              <span>🚀</span> Restart &amp; Launch Setup Now
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowRestartModal(false)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: '#64748B',
+                fontSize: 12.5,
+                fontWeight: 600,
+                cursor: 'pointer',
+                padding: '6px 12px'
+              }}
+            >
+              Install Later
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── AUTOMATIC INSTALL & RESTART OVERLAY ── */}
       {isRestarting && (

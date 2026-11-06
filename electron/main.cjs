@@ -38,6 +38,92 @@ ipcMain.handle('check-github-release', async () => {
   });
 });
 
+let downloadedInstallerPath = null;
+
+// IPC: Download update to temp in background without asking for download location
+ipcMain.handle('download-update', async (event, downloadUrl) => {
+  return new Promise((resolve) => {
+    try {
+      if (!downloadUrl) {
+        resolve({ success: false, error: 'No download URL provided' });
+        return;
+      }
+
+      const tempDir = app.getPath('temp');
+      downloadedInstallerPath = path.join(tempDir, 'Sri_Venkateswara_Steels_Update_Setup.exe');
+
+      const downloadFileWithRedirects = (url, maxRedirects = 5) => {
+        if (maxRedirects <= 0) {
+          resolve({ success: false, error: 'Too many redirects' });
+          return;
+        }
+
+        const client = url.startsWith('http:') ? require('http') : https;
+        client.get(url, { headers: { 'User-Agent': 'Sri-Venkateswara-Steels-ERP' } }, (res) => {
+          if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+            downloadFileWithRedirects(res.headers.location, maxRedirects - 1);
+            return;
+          }
+
+          if (res.statusCode !== 200) {
+            resolve({ success: false, error: `Server returned HTTP ${res.statusCode}` });
+            return;
+          }
+
+          const totalBytes = parseInt(res.headers['content-length'], 10) || 78000000;
+          let receivedBytes = 0;
+          const fileStream = fs.createWriteStream(downloadedInstallerPath);
+
+          res.on('data', (chunk) => {
+            receivedBytes += chunk.length;
+            fileStream.write(chunk);
+            const percent = Math.min(100, Math.round((receivedBytes / totalBytes) * 100));
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('update-download-progress', percent);
+            }
+          });
+
+          res.on('end', () => {
+            fileStream.end();
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('update-download-progress', 100);
+            }
+            resolve({ success: true, path: downloadedInstallerPath });
+          });
+        }).on('error', (err) => {
+          resolve({ success: false, error: err.message });
+        });
+      };
+
+      downloadFileWithRedirects(downloadUrl);
+    } catch (err) {
+      resolve({ success: false, error: err.message });
+    }
+  });
+});
+
+// IPC: Launch the setup installer in front and quit current app so user can click Next & Next
+ipcMain.handle('launch-installer-and-quit', async () => {
+  const tempDir = app.getPath('temp');
+  const installerPath = downloadedInstallerPath || path.join(tempDir, 'Sri_Venkateswara_Steels_Update_Setup.exe');
+
+  setTimeout(() => {
+    try {
+      const child = spawn(installerPath, [], {
+        detached: true,
+        stdio: 'ignore'
+      });
+      child.unref();
+      app.quit();
+    } catch (spawnErr) {
+      shell.openPath(installerPath);
+      app.quit();
+    }
+  }, 300);
+
+  return { success: true };
+});
+
 ipcMain.handle('download-and-install-update', async (event, downloadUrl) => {
   return new Promise((resolve) => {
     try {
@@ -115,8 +201,6 @@ ipcMain.handle('download-and-install-update', async (event, downloadUrl) => {
     }
   });
 });
-
-let mainWindow = null;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
