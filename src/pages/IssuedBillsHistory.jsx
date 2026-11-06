@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import Ic from '../components/Icon';
 import LOGO from '../assets/logo.png';
 import OWNER_SIGN from '../assets/Owner Signature.jpeg';
-import { inr, fmt, dt, amountInWords, exportToExcel, formatCustomerName } from '../utils';
+import { inr, fmt, dt, amountInWords, exportToExcel, formatCustomerName, getMaterialDisplayName } from '../utils';
 import { useLanguage } from '../context/LanguageContext';
 
 /**
@@ -11,7 +11,8 @@ import { useLanguage } from '../context/LanguageContext';
  * When hovering over the cell, displays the full list of materials floating IN FRONT
  * via React Portal to document.body, eliminating table clipping and scrollbars completely!
  */
-function MaterialSummaryCell({ bill, lang = 'en' }) {
+function MaterialSummaryCell({ bill, lang = 'en', items = [] }) {
+  const { t } = useLanguage();
   const [showDialog, setShowDialog] = useState(false);
   const [coords, setCoords] = useState(null);
   const cellRef = useRef(null);
@@ -49,6 +50,8 @@ function MaterialSummaryCell({ bill, lang = 'en' }) {
     return <td className="mut" style={{ fontSize: 12 }}>—</td>;
   }
 
+  const firstDisplayName = getMaterialDisplayName(first, lang, items);
+
   return (
     <td
       ref={cellRef}
@@ -60,7 +63,7 @@ function MaterialSummaryCell({ bill, lang = 'en' }) {
         {/* Primary/First Product */}
         <div style={{ fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
           <span style={{ fontWeight: 600, color: 'var(--navy)' }}>
-            {lang === 'ta' ? (first.nameTa || first.name || 'Material') : (first.name || 'Material')}
+            {firstDisplayName}
           </span>
           <span style={{
             fontSize: 10.5,
@@ -90,9 +93,9 @@ function MaterialSummaryCell({ bill, lang = 'en' }) {
                 alignItems: 'center',
                 gap: 4
               }}
-              title="Hover to view all product details"
+              title={t('hoverToViewMaterials')}
             >
-              +{moreCount} more products <span style={{ fontSize: 9 }}>▾</span>
+              {t('moreProductsBadge', { n: moreCount })} <span style={{ fontSize: 9 }}>▾</span>
             </span>
           </div>
         )}
@@ -128,7 +131,7 @@ function MaterialSummaryCell({ bill, lang = 'en' }) {
             marginBottom: 10
           }}>
             <div style={{ fontWeight: 800, fontSize: 13, color: 'var(--navy)' }}>
-              📦 {bill.no} · All {rows.length} Materials
+              {t('dialogAllMaterialsTitle', { no: bill.no, n: rows.length })}
             </div>
             <span style={{ fontSize: 11.5, color: 'var(--mut)', fontWeight: 700 }}>
               {bill.cust}
@@ -138,36 +141,39 @@ function MaterialSummaryCell({ bill, lang = 'en' }) {
           <table style={{ width: '100%', fontSize: 11.5, borderCollapse: 'collapse', tableLayout: 'fixed', boxSizing: 'border-box' }}>
             <thead>
               <tr style={{ background: '#F8FAFC', color: 'var(--mut)', borderBottom: '1px solid var(--line)' }}>
-                <th style={{ width: '40%', padding: '6px 8px', textAlign: 'left', fontSize: 10.5 }}>Material</th>
-                <th style={{ width: '15%', padding: '6px 8px', textAlign: 'right', fontSize: 10.5 }}>Qty</th>
-                <th style={{ width: '15%', padding: '6px 8px', textAlign: 'right', fontSize: 10.5 }}>Weight</th>
-                <th style={{ width: '15%', padding: '6px 8px', textAlign: 'right', fontSize: 10.5 }}>Rate</th>
-                <th style={{ width: '15%', padding: '6px 10px', textAlign: 'right', fontSize: 10.5 }}>Amount</th>
+                <th style={{ width: '40%', padding: '6px 8px', textAlign: 'left', fontSize: 10.5 }}>{t('tblMaterial')}</th>
+                <th style={{ width: '15%', padding: '6px 8px', textAlign: 'right', fontSize: 10.5 }}>{t('tblQty')}</th>
+                <th style={{ width: '15%', padding: '6px 8px', textAlign: 'right', fontSize: 10.5 }}>{t('tblWeight')}</th>
+                <th style={{ width: '15%', padding: '6px 8px', textAlign: 'right', fontSize: 10.5 }}>{t('tblRate')}</th>
+                <th style={{ width: '15%', padding: '6px 10px', textAlign: 'right', fontSize: 10.5 }}>{t('tblAmount')}</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((r, i) => (
-                <tr key={i} style={{ borderBottom: '1px solid #F1F5F9' }}>
-                  <td style={{ padding: '6px 8px', fontWeight: 600, color: 'var(--navy)', whiteSpace: 'normal', wordBreak: 'break-word' }}>
-                    {lang === 'ta' ? (r.nameTa || r.name) : r.name}
-                    {r.size && (
-                      <span style={{ fontSize: 10, color: 'var(--mut)', display: 'block' }}>Size: {r.size}</span>
-                    )}
-                  </td>
-                  <td style={{ padding: '6px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    {fmt(r.qty)} {r.uom || ''}
-                  </td>
-                  <td style={{ padding: '6px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    {r.weight ? `${fmt(r.weight)} ${r.weightUnit || 'KG'}` : '-'}
-                  </td>
-                  <td style={{ padding: '6px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    ₹{fmt(r.rate)}
-                  </td>
-                  <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 700, color: 'var(--navy)', whiteSpace: 'nowrap' }}>
-                    ₹{fmt(r.amt)}
-                  </td>
-                </tr>
-              ))}
+              {rows.map((r, i) => {
+                const itemDisplayName = getMaterialDisplayName(r, lang, items);
+                return (
+                  <tr key={i} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                    <td style={{ padding: '6px 8px', fontWeight: 600, color: 'var(--navy)', whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                      {itemDisplayName}
+                      {r.size && !itemDisplayName.includes(r.size) && (
+                        <span style={{ fontSize: 10, color: 'var(--mut)', display: 'block' }}>Size: {r.size}</span>
+                      )}
+                    </td>
+                    <td style={{ padding: '6px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      {fmt(r.qty)} {r.uom || ''}
+                    </td>
+                    <td style={{ padding: '6px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      {r.weight ? `${fmt(r.weight)} ${r.weightUnit || 'KG'}` : '-'}
+                    </td>
+                    <td style={{ padding: '6px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      ₹{fmt(r.rate)}
+                    </td>
+                    <td style={{ padding: '6px 10px', textAlign: 'right', fontWeight: 700, color: 'var(--navy)', whiteSpace: 'nowrap' }}>
+                      ₹{fmt(r.amt)}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
 
@@ -184,8 +190,8 @@ function MaterialSummaryCell({ bill, lang = 'en' }) {
             paddingLeft: 4,
             paddingRight: 4
           }}>
-            <span>Total Weight: {fmt(bill.totalWeight || 0)} KGS</span>
-            <span>Total Payable: {inr(bill.total)}</span>
+            <span>{t('tblTotalWeight', { w: fmt(bill.totalWeight || 0) })}</span>
+            <span>{t('tblTotalPayable', { p: inr(bill.total) })}</span>
           </div>
         </div>,
         document.body
@@ -216,7 +222,7 @@ export default function IssuedBillsHistory({
   const [deleteCode, setDeleteCode] = useState('');
   const [typedCode, setTypedCode] = useState('');
 
-  const { lang } = useLanguage();
+  const { t, lang } = useLanguage();
 
   // ── Date Filtering Helper ──
   const isDateMatch = (dateStr, filter) => {
@@ -293,6 +299,8 @@ export default function IssuedBillsHistory({
         const matchVeh = (b.veh || '').toLowerCase().includes(q);
         const matchItems = (b.rows || []).some(r =>
           (r.name || '').toLowerCase().includes(q) ||
+          (r.rawName || '').toLowerCase().includes(q) ||
+          (r.nameTa || '').toLowerCase().includes(q) ||
           (r.hsn || '').includes(q)
         );
         if (!matchNo && !matchCust && !matchProj && !matchPhone && !matchVeh && !matchItems) {
@@ -488,29 +496,29 @@ export default function IssuedBillsHistory({
         {/* ── KPI Summary Cards Strip ── */}
         <div className="kpis kpis-5" style={{ marginBottom: 20 }}>
         <div className="kpi">
-          <small>Total Bills Issued</small>
+          <small>{t('kpiTotalBillsIssued')}</small>
           <strong style={{ color: 'var(--navy)' }}>{fmt(stats.count)}</strong>
-          <em>Delivery vouchers logged</em>
+          <em>{t('kpiDeliveryVouchersLogged')}</em>
         </div>
         <div className="kpi gd">
-          <small>Total Delivery Value</small>
+          <small>{t('kpiTotalDeliveryValue')}</small>
           <strong style={{ color: 'var(--navy)' }}>{inr(stats.totalAmt)}</strong>
-          <em>Gross dispatched turnover</em>
+          <em>{t('kpiGrossTurnover')}</em>
         </div>
         <div className="kpi">
-          <small>Cash &amp; UPI Paid</small>
+          <small>{t('kpiCashUpiPaid')}</small>
           <strong style={{ color: '#166534' }}>{inr(stats.cashUpiAmt)}</strong>
-          <em>Cleared payments</em>
+          <em>{t('kpiClearedPayments')}</em>
         </div>
         <div className="kpi">
-          <small>Credit / Contractor Debit</small>
+          <small>{t('kpiCreditDebit')}</small>
           <strong style={{ color: 'var(--amb)' }}>{inr(stats.creditDebitAmt)}</strong>
-          <em>On customer account</em>
+          <em>{t('kpiOnCustomerAccount')}</em>
         </div>
         <div className="kpi">
-          <small>Material Line Items</small>
+          <small>{t('kpiMaterialLineItems')}</small>
           <strong style={{ color: 'var(--navy)' }}>{fmt(stats.lineItemsCount)}</strong>
-          <em>Steel items dispatched</em>
+          <em>{t('kpiSteelItemsDispatched')}</em>
         </div>
       </div>
 
@@ -532,7 +540,7 @@ export default function IssuedBillsHistory({
             <input
               className="in"
               style={{ width: '100%', paddingLeft: 34, fontSize: 13, background: '#fff' }}
-              placeholder="Search Bill No, Customer, Vehicle, Phone..."
+              placeholder={t('searchHistoryPlaceholder')}
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
@@ -562,12 +570,12 @@ export default function IssuedBillsHistory({
             style={{ width: 145, flexShrink: 0, fontSize: 12.5, fontWeight: 600 }}
             value={filterPay}
             onChange={e => setFilterPay(e.target.value)}
-            aria-label="Filter by payment mode"
+            aria-label={t('filterByPaymentMode')}
           >
-            <option value="all">💳 All Payments</option>
-            <option value="Cash">Cash</option>
-            <option value="UPI">UPI</option>
-            <option value="Card">Card</option>
+            <option value="all">{t('filterAllPayments')}</option>
+            <option value="Cash">{t('filterCash')}</option>
+            <option value="UPI">{t('filterUPI')}</option>
+            <option value="Card">{t('filterCard')}</option>
           </select>
 
           {/* Date Selector Dropdown with Today as default and Date Range option */}
@@ -576,14 +584,14 @@ export default function IssuedBillsHistory({
             style={{ width: 145, flexShrink: 0, fontSize: 12.5, fontWeight: 600 }}
             value={filterDate}
             onChange={e => setFilterDate(e.target.value)}
-            aria-label="Filter by date range"
+            aria-label={t('filterByDateRange')}
           >
-            <option value="today">📅 Today</option>
-            <option value="yesterday">Yesterday</option>
-            <option value="week">Past 7 Days</option>
-            <option value="month">This Month</option>
-            <option value="custom">🗓️ Custom Range</option>
-            <option value="all">All Dates</option>
+            <option value="today">{t('filterDateToday')}</option>
+            <option value="yesterday">{t('filterDateYesterday')}</option>
+            <option value="week">{t('filterDateWeek')}</option>
+            <option value="month">{t('filterDateMonth')}</option>
+            <option value="custom">{t('filterDateCustom')}</option>
+            <option value="all">{t('filterDateAll')}</option>
           </select>
 
           {/* Inline Custom Date Range Inputs */}
@@ -597,7 +605,7 @@ export default function IssuedBillsHistory({
                 onChange={e => setFromDate(e.target.value)}
                 title="From Date"
               />
-              <span style={{ fontSize: 11, color: 'var(--mut)', fontWeight: 700 }}>to</span>
+              <span style={{ fontSize: 11, color: 'var(--mut)', fontWeight: 700 }}>{t('toDateSeparator')}</span>
               <input
                 type="date"
                 className="in"
@@ -623,7 +631,7 @@ export default function IssuedBillsHistory({
               }}
               style={{ fontSize: 12, flexShrink: 0 }}
             >
-              Reset
+              {t('resetBtn')}
             </button>
           )}
 
@@ -647,7 +655,7 @@ export default function IssuedBillsHistory({
               flexShrink: 0,
               borderRadius: 8
             }}
-            title="Download all issued delivery vouchers as Microsoft Excel (.csv)"
+            title={t('exportExcelTooltip')}
             aria-label="Export to Excel"
           >
             <Ic n="fileText" s={16} />
@@ -663,17 +671,17 @@ export default function IssuedBillsHistory({
             <Ic n="fileText" s={40} />
             <h3 style={{ margin: '14px 0 6px', color: 'var(--navy)' }}>
               {bills.length === 0
-                ? 'No delivery bills issued yet'
+                ? t('noDeliveryBillsYet')
                 : filterDate === 'today'
-                  ? 'No delivery bills issued today'
-                  : 'No bills match your search criteria'}
+                  ? t('noDeliveryBillsToday')
+                  : t('noBillsMatchCriteria')}
             </h3>
             <div style={{ fontSize: 13, color: 'var(--mut)', maxWidth: 440, margin: '0 auto 16px' }}>
               {bills.length === 0
-                ? 'Issue bills to contractors and customers with real-time stock deduction from live inventory.'
+                ? t('noDeliveryBillsSub')
                 : filterDate === 'today'
-                  ? 'No bills have been generated today. You can view all previous bills or create a new one.'
-                  : 'Try adjusting your search keywords, payment filter, or date range selector.'}
+                  ? t('noDeliveryBillsTodaySub')
+                  : t('noBillsMatchSub')}
             </div>
             {bills.length > 0 && filterDate === 'today' && (
               <div style={{ marginTop: 6, display: 'flex', gap: 10, justifyContent: 'center' }}>
@@ -683,7 +691,7 @@ export default function IssuedBillsHistory({
                   onClick={() => setFilterDate('all')}
                   style={{ gap: 6, fontWeight: 700, color: 'var(--navy)', background: '#fff' }}
                 >
-                  <Ic n="fileText" s={14} /> View All Bills ({bills.length})
+                  <Ic n="fileText" s={14} /> {t('viewAllBillsBtn', { n: bills.length })}
                 </button>
               </div>
             )}
@@ -694,7 +702,7 @@ export default function IssuedBillsHistory({
                 onClick={() => go('bill')}
                 style={{ padding: '9px 18px', fontSize: 13 }}
               >
-                <Ic n="plus" s={15} /> Create First Issue Bill
+                <Ic n="plus" s={15} /> {t('createFirstIssueBillBtn')}
               </button>
             )}
           </div>
@@ -703,14 +711,14 @@ export default function IssuedBillsHistory({
             <table>
               <thead>
                 <tr>
-                  <th style={{ width: 140 }}>Issue Bill No</th>
-                  <th style={{ width: 120 }}>Date &amp; Time</th>
-                  <th>Customer / Contractor</th>
-                  <th>Vehicle / Contact</th>
-                  <th style={{ minWidth: 220 }}>Materials Issued</th>
-                  <th>Payment Mode</th>
-                  <th className="r" style={{ width: 120 }}>Total Amount</th>
-                  <th className="r" style={{ width: 140 }}>CRUD Actions</th>
+                  <th style={{ width: 140 }}>{t('colIssueBillNo')}</th>
+                  <th style={{ width: 120 }}>{t('colDateTime')}</th>
+                  <th>{t('colCustomerContractor')}</th>
+                  <th>{t('colVehicleContact')}</th>
+                  <th style={{ minWidth: 220 }}>{t('colMaterialsIssued')}</th>
+                  <th>{t('colPaymentMode')}</th>
+                  <th className="r" style={{ width: 120 }}>{t('colTotalAmount')}</th>
+                  <th className="r" style={{ width: 140 }}>{t('colCrudActions')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -728,7 +736,7 @@ export default function IssuedBillsHistory({
                           cursor: 'pointer',
                           textAlign: 'left'
                         }}
-                        title="Click to view full voucher preview"
+                        title={t('clickToViewVoucherPreview')}
                       >
                         <span style={{
                           fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
@@ -811,7 +819,7 @@ export default function IssuedBillsHistory({
                     </td>
 
                     {/* Materials Issued (Interactive with on-hover dialog) */}
-                    <MaterialSummaryCell bill={b} lang={lang} />
+                    <MaterialSummaryCell bill={b} lang={lang} items={items} />
 
                     {/* Payment Mode */}
                     <td>
@@ -821,7 +829,7 @@ export default function IssuedBillsHistory({
                         color: (b.pay || '').includes('Cash') || (b.pay || '').includes('UPI') ? '#166534' : '#b45309',
                         borderColor: (b.pay || '').includes('Cash') || (b.pay || '').includes('UPI') ? '#bbf7d0' : '#fde68a'
                       }}>
-                        {b.pay || 'Cash'}
+                        {b.pay === 'Cash' ? t('filterCash') : (b.pay === 'UPI' ? t('filterUPI') : (b.pay === 'Card' ? t('filterCard') : (b.pay || t('filterCash'))))}
                       </span>
                     </td>
 
@@ -831,7 +839,7 @@ export default function IssuedBillsHistory({
                         {inr(b.total)}
                       </b>
                       <div style={{ fontSize: 10, color: 'var(--mut)' }}>
-                        Tax: {inr(b.tax)}
+                        {t('taxSmall', { amt: inr(b.tax) })}
                       </div>
                     </td>
 
@@ -844,7 +852,7 @@ export default function IssuedBillsHistory({
                           className="btn sm"
                           onClick={() => setViewBill(b)}
                           style={{ padding: '4px 7px', fontSize: 11 }}
-                          title="View / Print Tax Invoice Voucher"
+                          title={t('viewBillTooltip')}
                         >
                           <Ic n="eye" s={13} />
                         </button>
@@ -858,7 +866,7 @@ export default function IssuedBillsHistory({
                             setTimeout(() => window.print(), 100);
                           }}
                           style={{ padding: '4px 7px', fontSize: 11 }}
-                          title="Quick Print Delivery Slip"
+                          title={t('quickPrintTooltip')}
                         >
                           <Ic n="print" s={13} />
                         </button>
@@ -869,7 +877,7 @@ export default function IssuedBillsHistory({
                           className="btn sm"
                           onClick={() => handleStartEdit(b)}
                           style={{ padding: '4px 7px', fontSize: 11, color: 'var(--navy)' }}
-                          title="Edit Bill in Issue Bill Page"
+                          title={t('editBillTooltip')}
                         >
                           <Ic n="edit" s={13} />
                         </button>
@@ -885,7 +893,7 @@ export default function IssuedBillsHistory({
                             setTypedCode('');
                           }}
                           style={{ padding: '4px 7px', fontSize: 11, color: 'var(--red)', borderColor: '#fca5a5' }}
-                          title="Void / Delete Bill and Return Stock"
+                          title={t('deleteBillTooltip')}
                         >
                           <Ic n="trash" s={13} />
                         </button>
@@ -1081,22 +1089,24 @@ export default function IssuedBillsHistory({
                 <table>
                   <thead>
                     <tr>
-                      <th>Item</th>
-                      <th>HSN</th>
-                      <th className="r">Qty</th>
-                      <th className="r">Weight</th>
-                      <th style={{ textAlign: 'center' }}>Unit</th>
-                      <th className="r">Rate</th>
-                      <th className="r">Amount</th>
+                      <th>{t('colItem') || 'Item'}</th>
+                      <th>{t('colHsn') || 'HSN'}</th>
+                      <th className="r">{t('colQty') || 'Qty'}</th>
+                      <th className="r">{t('colWeight') || 'Weight'}</th>
+                      <th style={{ textAlign: 'center' }}>{t('colUnit') || 'Unit'}</th>
+                      <th className="r">{t('colRate') || 'Rate'}</th>
+                      <th className="r">{t('colAmount') || 'Amount'}</th>
                     </tr>
                   </thead>
                   <tbody>
                     {(viewBill.rows && viewBill.rows.length > 0) ? (
-                      viewBill.rows.map((r, k) => (
+                      viewBill.rows.map((r, k) => {
+                        const rowDisplayName = getMaterialDisplayName(r, lang, items);
+                        return (
                         <tr key={k}>
                           <td style={{ whiteSpace: 'normal', fontWeight: 600 }}>
-                            <div>{lang === 'ta' ? (r.nameTa || r.name) : (r.name || r.nameTa)}</div>
-                            {r.size && (
+                            <div>{rowDisplayName}</div>
+                            {r.size && !rowDisplayName.includes(r.size) && (
                               <div style={{ fontSize: 11, color: 'var(--navy)', fontWeight: 700, marginTop: 2 }}>
                                 <span style={{ background: 'var(--steelbg)', padding: '1px 6px', borderRadius: 4, border: '1px solid var(--line)' }}>
                                   Size: {r.size}
@@ -1134,7 +1144,8 @@ export default function IssuedBillsHistory({
                           <td className="r">{fmt(r.rate)}</td>
                           <td className="r"><b>{fmt(r.amt)}</b></td>
                         </tr>
-                      ))
+                        );
+                      })
                     ) : (
                       <tr>
                         <td colSpan="7" className="mut" style={{ textAlign: 'center', padding: 24 }}>
@@ -1301,13 +1312,13 @@ export default function IssuedBillsHistory({
                   handleStartEdit(b);
                 }}
               >
-                <Ic n="edit" s={14} /> Edit This Bill
+                <Ic n="edit" s={14} /> {t('editThisBillBtn')}
               </button>
               <button type="button" className="btn gold" onClick={() => window.print()}>
-                <Ic n="print" s={14} /> Print Issue Slip
+                <Ic n="print" s={14} /> {t('printIssueSlip') || 'Print Issue Slip'}
               </button>
               <button type="button" className="btn" onClick={() => setViewBill(null)}>
-                Close Preview
+                {t('closePreviewBtn')}
               </button>
             </div>
           </div>
@@ -1323,8 +1334,8 @@ export default function IssuedBillsHistory({
           style={{
             position: 'fixed',
             inset: 0,
-            width: '100vw',
-            height: '100vh',
+            width: '100%',
+            height: '100%',
             background: 'rgba(15, 23, 42, 0.75)',
             backdropFilter: 'blur(5px)',
             WebkitBackdropFilter: 'blur(5px)',
@@ -1369,7 +1380,7 @@ export default function IssuedBillsHistory({
               </span>
               <div>
                 <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: '#991b1b' }}>
-                  Void / Delete Issue Bill?
+                  {t('voidBillModalTitle')}
                 </h3>
                 <div style={{ fontSize: 12, color: 'var(--mut)', marginTop: 2 }}>
                   Bill #{deleteBill.no} ({deleteBill.cust})
@@ -1378,7 +1389,7 @@ export default function IssuedBillsHistory({
             </div>
 
             <div style={{ fontSize: 13, color: '#334155', lineHeight: 1.5, marginBottom: 14 }}>
-              Are you sure you want to permanently delete this delivery voucher for <b>{inr(deleteBill.total)}</b>?
+              {t('voidBillModalDesc', { amt: inr(deleteBill.total) })}
             </div>
 
             <div style={{
@@ -1390,12 +1401,12 @@ export default function IssuedBillsHistory({
               color: '#166534',
               marginBottom: 16
             }}>
-              <b style={{ display: 'block', marginBottom: 4 }}>✓ Automatic Inventory Restitution:</b>
-              The following material quantities will be returned directly back to live stock inventory:
+              <b style={{ display: 'block', marginBottom: 4 }}>{t('autoRestitutionTitle')}</b>
+              {t('autoRestitutionDesc')}
               <ul style={{ margin: '4px 0 0 16px', padding: 0 }}>
                 {(deleteBill.rows || []).map((r, i) => (
                   <li key={i}>
-                    <b>{r.name}</b>: +{fmt(r.weight || r.qty)} {r.weightUnit || r.uom || ''}
+                    <b>{getMaterialDisplayName(r, lang, items)}</b>: +{fmt(r.weight || r.qty)} {r.weightUnit || r.uom || ''}
                   </li>
                 ))}
               </ul>
@@ -1411,7 +1422,7 @@ export default function IssuedBillsHistory({
               marginBottom: 14
             }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: '#991B1B', marginBottom: 4, letterSpacing: '.05em' }}>
-                ENTER 6-DIGIT VERIFICATION CODE TO CONFIRM:
+                {t('verificationCodePrompt')}
               </div>
               <div style={{
                 fontSize: 26,
@@ -1449,7 +1460,7 @@ export default function IssuedBillsHistory({
                 className="btn"
                 onClick={handleCancelDelete}
               >
-                Cancel
+                {t('cancelBtn')}
               </button>
               <button
                 type="button"
@@ -1464,7 +1475,7 @@ export default function IssuedBillsHistory({
                   borderColor: '#dc2626'
                 }}
               >
-                <Ic n="trash" s={14} /> Confirm Delete &amp; Restore Stock
+                <Ic n="trash" s={14} /> {t('confirmDeleteBtn')}
               </button>
             </div>
           </div>

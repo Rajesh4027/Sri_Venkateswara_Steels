@@ -19,12 +19,17 @@
   --grnbg: #E4F5EB;
   --blue: #1D63D8;
   --bluebg: #EAF2FD;
+  --app-zoom-factor: 1;
+  --app-vh: 100vh;
   box-sizing: border-box;
   padding-top: env(safe-area-inset-top, 0px);
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 html {
+  min-height: var(--app-vh, 100vh);
+  height: auto;
+  background: #FAFBFC;
   scroll-padding-top: env(safe-area-inset-top, 0px);
 }
 
@@ -34,11 +39,20 @@ html {
 
 body {
   margin: 0;
+  min-height: var(--app-vh, 100vh);
+  height: auto;
   background: #FAFBFC;
   color: var(--ink);
   font-family: 'Plus Jakarta Sans', 'Mukta Malar', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   font-size: 14px;
   line-height: 1.5;
+}
+
+#root {
+  min-height: var(--app-vh, 100vh);
+  display: flex;
+  flex-direction: column;
+  background: #FAFBFC;
 }
 
 /* ── Balanced Multilingual Typography (Tamil & English) ── */
@@ -105,8 +119,10 @@ button {
 .app {
   display: grid;
   grid-template-columns: 284px 1fr;
-  min-height: 100vh;
-  transition: grid-template-columns .28s cubic-bezier(.4, 0, .2, 1);
+  min-height: var(--app-vh, 100vh);
+  transition: grid-template-columns 0.8s cubic-bezier(0.25, 1, 0.5, 1);
+  background: #FAFBFC;
+  flex: 1;
 }
 
 .app.sidebar-collapsed {
@@ -119,12 +135,13 @@ button {
   background: #fff;
   position: sticky;
   top: 0;
-  height: 100vh;
+  height: var(--app-vh, 100vh);
+  max-height: var(--app-vh, 100vh);
   display: flex;
   flex-direction: column;
   overflow: hidden;
   padding: 0;
-  transition: width .28s cubic-bezier(.4, 0, .2, 1);
+  transition: width 0.8s cubic-bezier(0.25, 1, 0.5, 1);
   width: 284px;
   flex-shrink: 0;
   will-change: width;
@@ -148,7 +165,7 @@ button {
   min-height: 68px;
   height: 68px;
   box-sizing: border-box;
-  transition: padding .28s cubic-bezier(.4, 0, .2, 1);
+  transition: padding 0.8s cubic-bezier(0.25, 1, 0.5, 1);
 }
 
 .brand:hover {
@@ -166,7 +183,7 @@ button {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.8s cubic-bezier(0.25, 1, 0.5, 1);
 }
 
 .brand-logo {
@@ -179,7 +196,7 @@ button {
   padding: 3px;
   border: 1px solid var(--line);
   display: block;
-  transition: opacity 0.22s ease, transform 0.22s ease;
+  transition: opacity 0.4s ease, transform 0.8s cubic-bezier(0.25, 1, 0.5, 1);
 }
 
 .brand-expand-overlay {
@@ -196,7 +213,7 @@ button {
   opacity: 0;
   pointer-events: none;
   transform: scale(0.85);
-  transition: opacity 0.22s ease, transform 0.22s cubic-bezier(0.4, 0, 0.2, 1), background 0.15s ease, color 0.15s ease;
+  transition: opacity 0.4s ease, transform 0.8s cubic-bezier(0.25, 1, 0.5, 1), background 0.15s ease, color 0.15s ease;
 }
 
 .side.collapsed .brand {
@@ -237,7 +254,7 @@ button {
   flex: 1;
   min-width: 0;
   overflow: hidden;
-  transition: opacity .2s, max-width .25s cubic-bezier(.4, 0, .2, 1);
+  transition: opacity 0.4s ease, max-width 0.8s cubic-bezier(0.25, 1, 0.5, 1);
 }
 
 .brand-info b {
@@ -407,7 +424,7 @@ button {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
-  transition: opacity .2s, max-width .25s cubic-bezier(.4, 0, .2, 1);
+  transition: opacity 0.4s ease, max-width 0.8s cubic-bezier(0.25, 1, 0.5, 1);
   max-width: 200px;
   opacity: 1;
 }
@@ -450,7 +467,7 @@ button {
   position: relative !important;
   box-sizing: border-box !important;
   flex-shrink: 0 !important;
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  transition: all 0.8s cubic-bezier(0.25, 1, 0.5, 1) !important;
 }
 
 .side.collapsed .nav button svg,
@@ -591,13 +608,15 @@ button {
   padding: 10px 10px 6px;
   flex-shrink: 0;
   overflow: hidden;
-  transition: opacity .2s, height .25s;
+  max-height: 80px;
+  transition: opacity 0.4s ease, max-height 0.8s cubic-bezier(0.25, 1, 0.5, 1), padding 0.8s cubic-bezier(0.25, 1, 0.5, 1);
 }
 
 .side.collapsed .side-quick-btn {
   opacity: 0;
-  height: 0;
+  max-height: 0;
   padding: 0;
+  pointer-events: none;
 }
 
 /* ── Footer ────────────────────────────────────────── */
@@ -610,14 +629,14 @@ button {
   border-top: 1px solid var(--line);
   flex-shrink: 0;
   overflow: hidden;
-  transition: opacity .2s, height .25s;
+  transition: padding 0.8s cubic-bezier(0.25, 1, 0.5, 1);
 }
 
 .side.collapsed .foot {
-  opacity: 0;
-  height: 0;
-  padding: 0;
-  border: 0;
+  opacity: 1 !important;
+  height: auto !important;
+  padding: 8px 4px 12px !important;
+  border-top: 1px solid var(--line) !important;
 }
 
 /* ── Header collapse toggle ────────────────────────── */
@@ -649,6 +668,10 @@ button {
   min-width: 0;
   width: 100%;
   background: #FAFBFC;
+  display: flex;
+  flex-direction: column;
+  min-height: var(--app-vh, 100vh);
+  flex: 1;
 }
 
 /* ── Flexible Page Container ──
@@ -729,6 +752,9 @@ button {
 .pg {
   padding: 24px 28px 20px;
   box-sizing: border-box;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 .alert {
@@ -1107,8 +1133,9 @@ button {
 .stock-page-container {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - 48px);
-  min-height: 480px;
+  flex: 1;
+  min-height: calc(var(--app-vh, 100vh) - 48px);
+  height: 100%;
 }
 
 .stock-table-card {
@@ -2074,7 +2101,7 @@ th.r {
 .login-split-page {
   display: grid;
   grid-template-columns: 1.08fr 0.92fr;
-  min-height: 100vh;
+  min-height: var(--app-vh, 100vh);
   width: 100%;
   font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
   background: #FFFDF9;
@@ -2127,6 +2154,12 @@ th.r {
     padding: 40px 24px 60px;
     border-left: none;
     border-top: 1px solid var(--line);
+  }
+}
+
+@media print {
+  html, body {
+    zoom: 100% !important;
   }
 }
 
@@ -2958,7 +2991,7 @@ th.r {
   background: #fff !important;
   width: 100% !important;
   max-width: 760px !important;
-  height: 100vh !important;
+  height: var(--app-vh, 100vh) !important;
   margin-left: auto !important;
   margin-right: 0 !important;
   display: flex !important;

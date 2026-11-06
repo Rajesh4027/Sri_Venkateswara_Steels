@@ -5,8 +5,42 @@ import { useLanguage } from '../context/LanguageContext';
  * Placed beside the Software Version Alert button on the top-right corner.
  * Allows instant switching between English and Tamil with localStorage persistence.
  */
-export default function LanguageToggle({ style = {} }) {
+export default function LanguageToggle({ style = {}, compact = false }) {
   const { lang, setLang } = useLanguage();
+
+  if (compact) {
+    return (
+      <button
+        type="button"
+        onClick={() => setLang(lang === 'en' ? 'ta' : 'en')}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 3,
+          background: '#FFFDF5',
+          border: '1.5px solid #FDE68A',
+          borderRadius: 9999,
+          padding: '3px 8px',
+          color: '#92400E',
+          fontSize: 11,
+          fontWeight: 800,
+          cursor: 'pointer',
+          boxShadow: '0 1px 3px rgba(245, 158, 11, 0.12)',
+          outline: 'none',
+          transition: 'all 0.18s ease',
+          fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
+          ...style
+        }}
+        title={`Current: ${lang === 'en' ? 'English' : 'தமிழ்'}. Click to switch language.`}
+        aria-label="Toggle English / Tamil"
+      >
+        <span style={{ color: lang === 'en' ? '#0B1B33' : '#B45309', fontWeight: lang === 'en' ? 900 : 600 }}>EN</span>
+        <span style={{ opacity: 0.4, fontSize: 10 }}>/</span>
+        <span style={{ color: lang === 'ta' ? '#0B1B33' : '#B45309', fontWeight: lang === 'ta' ? 900 : 600 }}>த</span>
+      </button>
+    );
+  }
 
   return (
     <div

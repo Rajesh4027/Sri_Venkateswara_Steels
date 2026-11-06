@@ -57,8 +57,8 @@ export function inferTamilName(nameEn) {
   if (/SPADE/i.test(n)) return 'மண்வெட்டி கைப்பிடியுடன்';
   if (/SAFETY SHOE/i.test(n)) return 'பாதுகாப்பு காலணி (Safety Shoe)';
   if (/COVER BLOCK/i.test(n)) return 'கவர் பிளாக் (Cover Block)';
-  if (/NAILS.*1.*1\/2/i.test(n)) return 'ஆணி 1 1/2 அங்குலம்';
-  if (/NAILS.*2.*1\/2/i.test(n)) return 'ஆணி 2 1/2 அங்குலம்';
+  if (/NAILS.*1.*1\/2|NAILS.*11\/2/i.test(n)) return 'ஆணி 1 1/2 அங்குலம்';
+  if (/NAILS.*2.*1\/2|NAILS.*21\/2/i.test(n)) return 'ஆணி 2 1/2 அங்குலம்';
   if (/NAILS.*2\s*X\s*2/i.test(n)) return 'ஆணி 2X2 வயர் ஆணி';
   if (/NAILS|SCREW/i.test(n)) return 'இரும்பு ஆணி (Nails)';
   if (/CEMENT/i.test(n)) return 'சிமெண்ட் மூட்டை (Cement)';
@@ -70,18 +70,140 @@ export function inferTamilName(nameEn) {
   return '';
 }
 
+export function inferEnglishName(nameTa) {
+  if (!nameTa) return '';
+  const s = String(nameTa).trim();
+  if (/டிஎம்டி.*12\s*மிமீ/i.test(s)) return 'TMT 12MM Fe550D Rebars';
+  if (/டிஎம்டி.*10\s*மிமீ/i.test(s)) return 'TMT 10MM Fe550D Rebars';
+  if (/டிஎம்டி.*16\s*மிமீ/i.test(s)) return 'TMT 16MM Fe550D Rebars';
+  if (/டிஎம்டி.*8\s*மிமீ/i.test(s)) return 'TMT 8MM Fe550D Rebars';
+  if (/டிஎம்டி.*20\s*மிமீ/i.test(s)) return 'TMT 20MM Rebars';
+  if (/டிஎம்டி.*25\s*மிமீ/i.test(s)) return 'TMT 25MM Rebars';
+  if (/டிஎம்டி|ஸ்டீல்\s*கம்பி/i.test(s)) return 'TMT Steel Rebars';
+  if (/கட்டு\s*கம்பி/i.test(s)) return 'Binding Wire';
+  if (/மட்டக்கோல்/i.test(s)) return 'Aluminum Mattakol';
+  if (/ஸ்ட்ரைட்\s*எட்ஜ்/i.test(s)) return 'Aluminum Straight Edge';
+  if (/மண்வெட்டி/i.test(s)) return 'Spade with Handle';
+  if (/காலணி|ஷூ/i.test(s)) return 'Safety Shoes';
+  if (/கவர்\s*பிளாக்/i.test(s)) return 'Cover Block';
+  if (/ஆணி.*1.*1\/2|ஆணி.*11\/2/i.test(s)) return 'Wire Nails 1 1/2"';
+  if (/ஆணி.*2.*1\/2|ஆணி.*21\/2/i.test(s)) return 'Wire Nails 2 1/2"';
+  if (/ஆணி.*2\s*X\s*2/i.test(s)) return 'Wire Nails 2X2';
+  if (/ஆணி|இரும்பு\s*ஆணி/i.test(s)) {
+    const numPart = s.replace(/[^\d/ ]/g, '').trim();
+    return numPart ? `Wire Nails ${numPart}"` : 'Wire Nails';
+  }
+  if (/சிமெண்ட்/i.test(s)) return 'Cement Bag';
+  if (/மணல்/i.test(s)) return 'Sand';
+  if (/சுத்தியல்/i.test(s)) return 'Hammer';
+  if (/குழாய்/i.test(s)) return 'UPVC Pipe';
+  if (/கையுறை/i.test(s)) return 'Safety Gloves';
+  if (/ஹெல்மெட்/i.test(s)) return 'Safety Helmet';
+  return '';
+}
+
 /**
  * Returns localized material name:
- * - When lang === 'ta': returns Tamil name (nameTa / tamilName) if available, fallback to English name.
- * - When lang === 'en': returns English name (name).
+ * - When lang === 'ta': returns Tamil name (nameTa / tamilName) if available, inferTamilName, or fallback.
+ * - When lang === 'en': returns English name (name / rawName / nameEn), inferEnglishName, or fallback.
+ * Supports passing `items` inventory array for authoritative cross-language lookup by item.id or name.
  */
-export function getMaterialDisplayName(item, lang = 'en') {
+export function getMaterialDisplayName(item, lang = 'en', items = []) {
   if (!item) return '';
-  if (typeof item === 'string') return item;
-  if (lang === 'ta') {
-    return (item.nameTa && item.nameTa.trim()) || (item.tamilName && item.tamilName.trim()) || inferTamilName(item.name) || item.name || '';
+  if (typeof item === 'string') {
+    const isTa = /[\u0B80-\u0BFF]/.test(item);
+    if (lang === 'ta') {
+      return isTa ? item : (inferTamilName(item) || item);
+    } else {
+      return !isTa ? item : (inferEnglishName(item) || item);
+    }
   }
-  return item.name || (item.nameTa && item.nameTa.trim()) || (item.tamilName && item.tamilName.trim()) || '';
+
+  // 1. Authoritative lookup in live items master inventory
+  let master = null;
+  if (item.id && Array.isArray(items) && items.length > 0) {
+    master = items.find(i => i.id === item.id);
+  }
+  if (!master && Array.isArray(items) && items.length > 0) {
+    const cEn = (item.rawName || item.nameEn || (!/[\u0B80-\u0BFF]/.test(item.name) ? item.name : '') || '').trim().toLowerCase();
+    const cTa = (item.nameTa || (item.name && /[\u0B80-\u0BFF]/.test(item.name) ? item.name : '') || '').trim().toLowerCase();
+    master = items.find(i => {
+      if (cEn && (i.name || '').trim().toLowerCase() === cEn) return true;
+      if (cTa && (i.nameTa || i.tamilName || '').trim().toLowerCase() === cTa) return true;
+      return false;
+    });
+  }
+
+  const sizeSuffix = item.size ? ` (Size: ${item.size})` : '';
+
+  if (lang === 'ta') {
+    // ── TAMIL REQUESTED ──
+    // 1. Master item Tamil name
+    if (master) {
+      const mTa = (master.nameTa && master.nameTa.trim()) ||
+                  (master.tamilName && master.tamilName.trim()) ||
+                  inferTamilName(master.name);
+      if (mTa) {
+        return item.size && !mTa.includes(item.size) ? `${mTa}${sizeSuffix}` : mTa;
+      }
+    }
+
+    // 2. Explicit Tamil name in row
+    if (item.nameTa && item.nameTa.trim()) {
+      return item.size && !item.nameTa.includes(item.size) ? `${item.nameTa.trim()}${sizeSuffix}` : item.nameTa.trim();
+    }
+
+    // 3. Row name contains Tamil script
+    if (item.name && /[\u0B80-\u0BFF]/.test(item.name)) {
+      return item.name;
+    }
+
+    // 4. Infer Tamil from rawName, nameEn or name
+    const enSource = item.rawName || item.nameEn || item.name || '';
+    const inferred = inferTamilName(enSource);
+    if (inferred) {
+      return item.size && !inferred.includes(item.size) ? `${inferred}${sizeSuffix}` : inferred;
+    }
+
+    return item.name || 'பொருள்';
+  } else {
+    // ── ENGLISH REQUESTED ──
+    // 1. Master item English name
+    if (master && master.name && !/[\u0B80-\u0BFF]/.test(master.name)) {
+      const mEn = master.name.trim();
+      return item.size && !mEn.includes(item.size) ? `${mEn}${sizeSuffix}` : mEn;
+    }
+
+    // 2. Explicit English rawName in row
+    if (item.rawName && !/[\u0B80-\u0BFF]/.test(item.rawName)) {
+      const rawEn = item.rawName.trim();
+      return item.size && !rawEn.includes(item.size) ? `${rawEn}${sizeSuffix}` : rawEn;
+    }
+
+    // 3. Explicit English nameEn in row
+    if (item.nameEn && !/[\u0B80-\u0BFF]/.test(item.nameEn)) {
+      return item.nameEn.trim();
+    }
+
+    // 4. Row name does NOT contain Tamil characters
+    if (item.name && !/[\u0B80-\u0BFF]/.test(item.name)) {
+      return item.name;
+    }
+
+    // 5. Master item name fallback
+    if (master && master.name) {
+      return item.size && !master.name.includes(item.size) ? `${master.name}${sizeSuffix}` : master.name;
+    }
+
+    // 6. Infer English from Tamil script in name or nameTa
+    const taSource = (item.name && /[\u0B80-\u0BFF]/.test(item.name) ? item.name : '') || item.nameTa || '';
+    const inferredEn = inferEnglishName(taSource);
+    if (inferredEn) {
+      return item.size && !inferredEn.includes(item.size) ? `${inferredEn}${sizeSuffix}` : inferredEn;
+    }
+
+    return item.name || item.nameTa || 'Material';
+  }
 }
 
 export function enrichItem(i) {

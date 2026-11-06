@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, Fragment } from 'react';
 import LOGO from '../assets/logo.png';
 import OWNER_SIGN from '../assets/Owner Signature.jpeg';
-import { fmt, inr, dt, amountInWords, DEFAULT_UOMS_LIST, formatCustomerName, getMaterialDisplayName } from '../utils';
+import { fmt, inr, dt, amountInWords, DEFAULT_UOMS_LIST, formatCustomerName, getMaterialDisplayName, inferTamilName } from '../utils';
 import Ic from '../components/Icon';
 import { IssueMaterialCombobox } from '../components/MaterialCombobox';
 import CustomerAutofillInput from '../components/CustomerCombobox';
@@ -389,8 +389,11 @@ export default function IssueBill({ items, bills, setBills, setItems, preset, to
         // When weight is not entered, calculate Line Amount = Qty * Rate.
         const billableQty = (hasWeight && weightInKg > 0) ? weightInKg : q;
         const amt = +(billableQty * (+l.rate || 0)).toFixed(2);
-        const itName = getMaterialDisplayName(it, lang);
-        const displayName = l.size ? `${itName} (Size: ${l.size})` : (itName || '');
+        const rawEnName = (it.name || l.rawName || l.name || '').trim();
+        const rawTaName = (it.nameTa || it.tamilName || inferTamilName(rawEnName) || l.nameTa || '').trim();
+        const displayNameEn = l.size ? `${rawEnName} (Size: ${l.size})` : rawEnName;
+        const displayNameTa = l.size ? `${rawTaName} (Size: ${l.size})` : rawTaName;
+        const currentDisplayName = lang === 'ta' ? displayNameTa : displayNameEn;
 
         return {
           ...l,
@@ -399,9 +402,10 @@ export default function IssueBill({ items, bills, setBills, setItems, preset, to
           weightInKg: hasWeight ? weightInKg : null,
           weightUnit: isGrams ? 'GMS' : 'KGS',
           stockDeductQty,
-          name: displayName,
-          nameTa: it.nameTa || '',
-          rawName: it.name || '',
+          name: displayNameEn || currentDisplayName,
+          nameEn: displayNameEn,
+          nameTa: displayNameTa || rawTaName,
+          rawName: rawEnName,
           uom,
           hsn: it.hsn || '',
           cat: it.cat || '',
@@ -1874,7 +1878,7 @@ export default function IssueBill({ items, bills, setBills, setItems, preset, to
               borderRadius: 16,
               maxWidth: 780,
               width: '100%',
-              maxHeight: 'calc(100vh - 32px)',
+              maxHeight: 'calc(var(--app-vh, 100vh) - 32px)',
               overflowY: 'auto',
               padding: '20px 24px',
               boxShadow: '-14px 0 45px rgba(0,0,0,.35)',
@@ -2116,8 +2120,8 @@ export default function IssueBill({ items, bills, setBills, setItems, preset, to
                       c.rows.map((r, k) => (
                         <tr key={k}>
                           <td style={{ whiteSpace: 'normal', fontWeight: 600 }}>
-                            <div>{lang === 'ta' ? (r.nameTa || r.rawName || r.name) : (r.rawName || r.name)}</div>
-                            {r.size && (
+                            <div>{getMaterialDisplayName(r, lang, items)}</div>
+                            {r.size && !getMaterialDisplayName(r, lang, items).includes(r.size) && (
                               <div style={{ fontSize: 11, color: 'var(--navy)', fontWeight: 700, marginTop: 2 }}>
                                 <span style={{ background: 'var(--steelbg)', padding: '1px 6px', borderRadius: 4, border: '1px solid var(--line)' }}>
                                   Size: {r.size}

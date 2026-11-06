@@ -12,9 +12,9 @@ import { useLanguage } from '../context/LanguageContext';
  * 4. Automatically installs & restarts the application at 100%.
  * 5. On restart, shows celebration toast and displays the updated latest version.
  */
-export default function SoftwareVersionAlert({ settings = {}, toast, style = {} }) {
+export default function SoftwareVersionAlert({ settings = {}, toast, style = {}, compact = false }) {
   const { t } = useLanguage();
-  const TARGET_VERSION = 'v2.1.0';
+  const TARGET_VERSION = 'v2.2.0';
 
   const [currentVersion, setCurrentVersion] = useState(() => {
     try {
@@ -157,17 +157,19 @@ export default function SoftwareVersionAlert({ settings = {}, toast, style = {} 
         style={{
           display: 'inline-flex',
           alignItems: 'center',
-          gap: 8,
-          padding: isUpdating
-            ? '6px 16px 6px 12px'
-            : (updateAvailable ? '6px 14px 6px 11px' : '6px 14px'),
+          gap: compact ? 4 : 8,
+          padding: compact
+            ? '3px 8px'
+            : (isUpdating
+              ? '6px 16px 6px 12px'
+              : (updateAvailable ? '6px 14px 6px 11px' : '6px 14px')),
           background: updateAvailable
             ? (isUpdating ? '#FEF3C7' : '#FFFBEB')
             : '#FFFDF5',
           border: updateAvailable ? '1.5px solid #F59E0B' : '1.5px solid #FDE68A',
           borderRadius: 9999,
           color: '#B45309',
-          fontSize: 13,
+          fontSize: compact ? 11 : 13,
           fontWeight: 800,
           cursor: isUpdating ? 'wait' : 'pointer',
           boxShadow: updateAvailable
@@ -252,24 +254,26 @@ export default function SoftwareVersionAlert({ settings = {}, toast, style = {} 
                 letterSpacing: '.01em'
               }}
             >
-              {TARGET_VERSION}
+              {compact ? TARGET_VERSION.replace(/\.0$/, '') : TARGET_VERSION}
             </span>
 
             {/* Update Ready Pill */}
-            <span
-              style={{
-                background: '#F59E0B',
-                color: '#FFFFFF',
-                fontSize: 10,
-                fontWeight: 800,
-                padding: '2px 8px',
-                borderRadius: 99,
-                letterSpacing: '0.03em',
-                textTransform: 'uppercase'
-              }}
-            >
-              {t('updateReadyBadge')}
-            </span>
+            {!compact && (
+              <span
+                style={{
+                  background: '#F59E0B',
+                  color: '#FFFFFF',
+                  fontSize: 10,
+                  fontWeight: 800,
+                  padding: '2px 8px',
+                  borderRadius: 99,
+                  letterSpacing: '0.03em',
+                  textTransform: 'uppercase'
+                }}
+              >
+                {t('updateReadyBadge')}
+              </span>
+            )}
           </>
         ) : (
           /* ── Up-to-Date State: Shows Latest Installed Version ── */
@@ -295,7 +299,7 @@ export default function SoftwareVersionAlert({ settings = {}, toast, style = {} 
                 letterSpacing: '.01em'
               }}
             >
-              {currentVersion}
+              {compact ? currentVersion.replace(/\.0$/, '') : currentVersion}
             </span>
           </>
         )}
