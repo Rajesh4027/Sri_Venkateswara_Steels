@@ -23,7 +23,7 @@ function isNewerVersion(remote, local) {
   return false;
 }
 
-const CURRENT_APP_VERSION = 'v2.5.0';
+const CURRENT_APP_VERSION = 'v2.6.0';
 const GITHUB_REPO = 'Rajesh4027/Sri_Venkateswara_Steels';
 const GITHUB_RELEASES_API = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
 
@@ -194,16 +194,18 @@ export default function SoftwareVersionAlert({ settings = {}, toast, style = {},
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 'u') {
-        localStorage.setItem('svs_app_version', 'v2.2.0');
-        setCurrentVersion('v2.2.0');
+        localStorage.setItem('svs_app_version', 'v2.5.0');
+        setCurrentVersion('v2.5.0');
         setTargetVersion(CURRENT_APP_VERSION);
+        setDownloadUrl(`https://github.com/${GITHUB_REPO}/releases/download/${CURRENT_APP_VERSION}/Sri.Venkateswara.Steels.Setup.${CURRENT_APP_VERSION.replace(/^v/, '')}.exe`);
         setUpdateAvailable(true);
         setHasAlerted(false);
         setIsUpdating(false);
         setIsRestarting(false);
+        setShowRestartModal(false);
         setDownloadProgress(0);
         if (toast) {
-          toast(`Reset to v2.2.0 for testing! Update alert to ${CURRENT_APP_VERSION} is now active.`);
+          toast(`Reset to v2.5.0 for testing! Update alert to ${CURRENT_APP_VERSION} is now active.`);
         }
       }
     };

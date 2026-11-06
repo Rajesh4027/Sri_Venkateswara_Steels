@@ -227,6 +227,13 @@ function createWindow() {
     return { action: 'allow' };
   });
 
+  // Guard against any spontaneous browser Save-As dialogs inside Electron
+  if (mainWindow.webContents.session) {
+    mainWindow.webContents.session.on('will-download', (event) => {
+      event.preventDefault();
+    });
+  }
+
   const devServerUrl = process.env.VITE_DEV_SERVER_URL || (process.env.NODE_ENV === 'development' ? 'http://localhost:5173' : null);
 
   if (devServerUrl) {
