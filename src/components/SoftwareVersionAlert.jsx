@@ -3,32 +3,74 @@ import LOGO from '../assets/logo.png';
 import { useLanguage } from '../context/LanguageContext';
 
 /**
+ * SemVer parser and comparator: returns true if remote > local
+ */
+function parseSemVer(v) {
+  if (!v) return [0, 0, 0];
+  const clean = String(v).replace(/^v/i, '').trim();
+  const parts = clean.split('.').map(p => parseInt(p, 10) || 0);
+  while (parts.length < 3) parts.push(0);
+  return parts;
+}
+
+function isNewerVersion(remote, local) {
+  const r = parseSemVer(remote);
+  const l = parseSemVer(local);
+  for (let i = 0; i < 3; i++) {
+    if (r[i] > l[i]) return true;
+    if (r[i] < l[i]) return false;
+  }
+  return false;
+}
+
+const CURRENT_APP_VERSION = 'v2.3.0';
+const GITHUB_REPO = 'Rajesh4027/Sri_Venkateswara_Steels';
+const GITHUB_RELEASES_API = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
+
+/**
  * SoftwareVersionAlert Component
  * 
  * Requirements:
- * 1. Outside button shows the latest version (e.g. ✨ v2.0.0 or ✨ v2.1.0).
- * 2. If any update is pending, button shows the update alert (● v2.1.0 UPDATE READY).
- * 3. On click, updates with a circular shrink ring animation from 0% to 100%.
- * 4. Automatically installs & restarts the application at 100%.
- * 5. On restart, shows celebration toast and displays the updated latest version.
+ * 1. Outside button shows the latest version (e.g. ✨ v2.3.0).
+ * 2. Periodically queries GitHub releases API for latest available updates.
+ * 3. If an update is pending on GitHub, button shows the update alert (● v2.x.x UPDATE READY).
+ * 4. On click, updates with a circular shrink ring animation from 0% to 100%.
+ * 5. Automatically launches the installer / downloads release asset and restarts app.
+ * 6. On restart, shows celebration toast and displays the updated latest version.
  */
 export default function SoftwareVersionAlert({ settings = {}, toast, style = {}, compact = false }) {
   const { t } = useLanguage();
-  const TARGET_VERSION = 'v2.2.0';
 
   const [currentVersion, setCurrentVersion] = useState(() => {
     try {
-      return localStorage.getItem('svs_app_version') || 'v2.0.0';
+      const stored = localStorage.getItem('svs_app_version');
+      if (stored && isNewerVersion(stored, CURRENT_APP_VERSION)) {
+        return stored;
+      }
+      return CURRENT_APP_VERSION;
     } catch (e) {
-      return 'v2.0.0';
+      return CURRENT_APP_VERSION;
     }
   });
 
+  const [targetVersion, setTargetVersion] = useState(CURRENT_APP_VERSION);
+  const [downloadUrl, setDownloadUrl] = useState('');
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [hasAlerted, setHasAlerted] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [isRestarting, setIsRestarting] = useState(false);
+
+  // Sync current build version on mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('svs_app_version');
+      if (!stored || isNewerVersion(CURRENT_APP_VERSION, stored)) {
+        localStorage.setItem('svs_app_version', CURRENT_APP_VERSION);
+        setCurrentVersion(CURRENT_APP_VERSION);
+      }
+    } catch (e) { }
+  }, []);
 
   // Check on initial load if an update was just completed
   useEffect(() => {
@@ -43,48 +85,88 @@ export default function SoftwareVersionAlert({ settings = {}, toast, style = {},
     } catch (e) { }
   }, [toast]);
 
-  // Periodic 10-second reload / update check engine
+  // Periodic GitHub releases API check engine (initial + every 20s)
   useEffect(() => {
-    const runCheck = () => {
-      const activeVer = localStorage.getItem('svs_app_version') || 'v2.0.0';
-      if (activeVer !== TARGET_VERSION) {
-        setUpdateAvailable(true);
-        if (!hasAlerted) {
-          setHasAlerted(true);
-          if (toast) {
-            toast(`🔔 Software Update Alert: ${TARGET_VERSION} is available! Click to update.`);
+    let isMounted = true;
+
+    const runCheck = async () => {
+      try {
+        const activeVer = localStorage.getItem('svs_app_version') || CURRENT_APP_VERSION;
+        const res = await fetch(GITHUB_RELEASES_API, {
+          headers: { Accept: 'application/vnd.github.v3+json' }
+        });
+
+        if (!res.ok) {
+          // If GitHub rate limit or offline, check against current targetVersion
+          if (isMounted && isNewerVersion(targetVersion, activeVer)) {
+            setUpdateAvailable(true);
           }
+          return;
         }
-      } else {
-        setUpdateAvailable(false);
+
+        const data = await res.json();
+        const remoteTag = data.tag_name || '';
+
+        if (!isMounted) return;
+
+        if (remoteTag && isNewerVersion(remoteTag, activeVer)) {
+          setTargetVersion(remoteTag);
+          setUpdateAvailable(true);
+
+          if (Array.isArray(data.assets) && data.assets.length > 0) {
+            const setupAsset = data.assets.find(a =>
+              a.name && (a.name.endsWith('Setup.exe') || a.name.endsWith('.exe'))
+            );
+            if (setupAsset && setupAsset.browser_download_url) {
+              setDownloadUrl(setupAsset.browser_download_url);
+            }
+          }
+
+          if (!hasAlerted) {
+            setHasAlerted(true);
+            if (toast) {
+              toast(`🔔 Software Update Alert: ${remoteTag} is available! Click to update.`);
+            }
+          }
+        } else {
+          setUpdateAvailable(false);
+        }
+      } catch (err) {
+        // Fallback for offline environments
+        const activeVer = localStorage.getItem('svs_app_version') || CURRENT_APP_VERSION;
+        if (isMounted && isNewerVersion(targetVersion, activeVer)) {
+          setUpdateAvailable(true);
+        }
       }
     };
 
     // Initial check after 800ms
     const initialTimer = setTimeout(runCheck, 800);
 
-    // Automated 10-second recurring background check interval
-    const intervalTimer = setInterval(runCheck, 10000);
+    // Recurring check every 20 seconds
+    const intervalTimer = setInterval(runCheck, 20000);
 
     return () => {
+      isMounted = false;
       clearTimeout(initialTimer);
       clearInterval(intervalTimer);
     };
-  }, [hasAlerted, toast]);
+  }, [hasAlerted, targetVersion, toast]);
 
-  // Optional keyboard shortcut to reset demo for testing if needed (Ctrl + Alt + U)
+  // Optional keyboard shortcut to simulate update for demo/testing (Ctrl + Alt + U)
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.ctrlKey && e.altKey && e.key.toLowerCase() === 'u') {
-        localStorage.setItem('svs_app_version', 'v2.0.0');
-        setCurrentVersion('v2.0.0');
+        localStorage.setItem('svs_app_version', 'v2.2.0');
+        setCurrentVersion('v2.2.0');
+        setTargetVersion(CURRENT_APP_VERSION);
         setUpdateAvailable(true);
         setHasAlerted(false);
         setIsUpdating(false);
         setIsRestarting(false);
         setDownloadProgress(0);
         if (toast) {
-          toast('Reset to v2.0.0 for testing! Update button is now active.');
+          toast(`Reset to v2.2.0 for testing! Update alert to ${CURRENT_APP_VERSION} is now active.`);
         }
       }
     };
@@ -108,19 +190,34 @@ export default function SoftwareVersionAlert({ settings = {}, toast, style = {},
 
     // Smooth progress steps from 0% to 100% with the circular shrink ring
     const steps = [
-      { progress: 14, time: 200 },
-      { progress: 28, time: 450 },
-      { progress: 46, time: 750 },
-      { progress: 65, time: 1050 },
-      { progress: 84, time: 1350 },
-      { progress: 95, time: 1650 },
-      { progress: 100, time: 1950 }
+      { progress: 14, time: 250 },
+      { progress: 28, time: 550 },
+      { progress: 46, time: 900 },
+      { progress: 65, time: 1250 },
+      { progress: 84, time: 1600 },
+      { progress: 95, time: 1950 },
+      { progress: 100, time: 2300 }
     ];
 
     steps.forEach(({ progress, time }) => {
       setTimeout(() => {
         setDownloadProgress(progress);
         if (progress === 100) {
+          // If a download URL is available, trigger installer download
+          if (downloadUrl) {
+            try {
+              const a = document.createElement('a');
+              a.href = downloadUrl;
+              a.download = '';
+              a.target = '_blank';
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+            } catch (e) {
+              window.open(downloadUrl, '_blank');
+            }
+          }
+
           // Transition to Restarting / Installing Overlay
           setTimeout(() => {
             setIsUpdating(false);
@@ -128,14 +225,14 @@ export default function SoftwareVersionAlert({ settings = {}, toast, style = {},
 
             // Persist the updated version
             try {
-              localStorage.setItem('svs_app_version', TARGET_VERSION);
-              localStorage.setItem('svs_just_installed_update', TARGET_VERSION);
+              localStorage.setItem('svs_app_version', targetVersion);
+              localStorage.setItem('svs_just_installed_update', targetVersion);
             } catch (e) { }
 
             // Automatic reload / restart
             setTimeout(() => {
               window.location.reload();
-            }, 1500);
+            }, 1800);
           }, 350);
         }
       }, time);
@@ -183,7 +280,7 @@ export default function SoftwareVersionAlert({ settings = {}, toast, style = {},
         }}
         title={
           updateAvailable
-            ? `Click to download & install update ${TARGET_VERSION}`
+            ? `Click to download & install update ${targetVersion}`
             : `Sri Venkateswara Steels ERP ${currentVersion} (Latest Release)`
         }
         aria-label="Software update button"
@@ -254,7 +351,7 @@ export default function SoftwareVersionAlert({ settings = {}, toast, style = {},
                 letterSpacing: '.01em'
               }}
             >
-              {compact ? TARGET_VERSION.replace(/\.0$/, '') : TARGET_VERSION}
+              {compact ? targetVersion.replace(/\.0$/, '') : targetVersion}
             </span>
 
             {/* Update Ready Pill */}
@@ -356,7 +453,7 @@ export default function SoftwareVersionAlert({ settings = {}, toast, style = {},
             />
 
             <h3 style={{ margin: '0 0 6px', fontSize: 20, fontWeight: 800, color: '#0B1B33' }}>
-              {t('installingUpdate', { v: TARGET_VERSION })}
+              {t('installingUpdate', { v: targetVersion })}
             </h3>
 
             <p style={{ margin: '0 0 20px', fontSize: 13.5, color: '#5F6B7A', lineHeight: 1.5, textAlign: 'center' }}>
