@@ -1,7 +1,7 @@
 {
   "name": "sri-venkateswara-steels",
   "private": true,
-  "version": "2.7.0",
+  "version": "2.8.0",
   "description": "Sri Venkateswara Steels - Official ERP & Inventory Management Desktop Software",
   "author": "Sri Venkateswara Steels",
   "type": "module",
@@ -21,11 +21,16 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.5",
+    "@tailwindcss/vite": "^4.3.5",
     "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.6.2",
     "concurrently": "^8.2.2",
     "cross-env": "^7.0.3",
     "electron": "^28.3.3",
     "electron-builder": "^24.13.3",
+    "postcss": "^8.5.32",
+    "tailwindcss": "^4.3.5",
     "vite": "^5.4.11",
     "wait-on": "^7.2.0"
   },

@@ -1070,16 +1070,16 @@ export function IssueMaterialCombobox({
                   {/* Column 1: Localized Product Name & matched HSN */}
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontWeight: 700, fontSize: 13.5, color: isOutOfStock ? '#991B1B' : 'var(--ink)' }}>
-                      {highlightMatch(lang === 'ta' && (item.nameTa || item.tamilName) ? (item.nameTa || item.tamilName) : item.name, query)}
+                      {highlightMatch(lang === 'ta' ? (item.nameTa || item.tamilName || inferTamilName(item.name) || item.name) : item.name, query)}
                     </div>
-                    {lang === 'ta' && item.name && (item.nameTa || item.tamilName) && (
+                    {lang === 'ta' && (item.nameTa || item.tamilName || inferTamilName(item.name)) && (
                       <div style={{ fontSize: 11, color: 'var(--mut)', marginTop: 1 }}>
                         EN: {item.name} · {item.id}
                       </div>
                     )}
-                    {lang !== 'ta' && (item.nameTa || item.tamilName) && (
+                    {lang !== 'ta' && (item.nameTa || item.tamilName || inferTamilName(item.name)) && (
                       <div style={{ fontSize: 11, color: '#B45309', marginTop: 1 }}>
-                        தமிழ்: {item.nameTa || item.tamilName}
+                        தமிழ்: {item.nameTa || item.tamilName || inferTamilName(item.name)}
                       </div>
                     )}
                     {isHsnMatch && (

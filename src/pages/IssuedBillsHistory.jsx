@@ -1231,10 +1231,10 @@ export default function IssuedBillsHistory({
                   lineHeight: 1.45
                 }}>
                   <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', color: 'var(--mut)', letterSpacing: '.05em', display: 'block', marginBottom: 2 }}>
-                    Amount in Words:
+                    {lang === 'ta' ? 'தொகை எழுத்துக்களில்:' : 'Amount in Words:'}
                   </span>
                   <b style={{ color: 'var(--navy)', fontSize: 12.5, fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif" }}>
-                    {amountInWords(viewBill.total)}
+                    {amountInWords(viewBill.total, lang)}
                   </b>
                 </div>
               </div>

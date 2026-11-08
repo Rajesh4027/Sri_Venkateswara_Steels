@@ -407,8 +407,104 @@ export function getSupplierMaterials(supplierName, items = [], inwardInvoices = 
   });
 }
 
-export function amountInWords(num) {
+export function numberToTamilWords(num) {
   const n = Math.round(Number(num) || 0);
+  if (n <= 0) return 'பூஜ்ஜியம்';
+
+  const ones = [
+    '', 'ஒன்று', 'இரண்டு', 'மூன்று', 'நான்கு', 'ஐந்து', 'ஆறு', 'ஏழு', 'எட்டு', 'ஒன்பது',
+    'பத்து', 'பதினொன்று', 'பன்னிரண்டு', 'பதிமூன்று', 'பதினான்கு', 'பதினைந்து', 'பதினாறு',
+    'பதினேழு', 'பதினெட்டு', 'பத்தொன்பது'
+  ];
+
+  const tensAlone = [
+    '', '', 'இருபது', 'முப்பது', 'நாற்பது', 'ஐம்பது', 'அறுபது', 'எழுபது', 'எண்பது', 'தொண்ணூறு'
+  ];
+
+  const tensPrefix = [
+    '', '', 'இருபத்தி ', 'முப்பத்தி ', 'நாற்பத்தி ', 'ஐம்பத்தி ', 'அறுபத்தி ', 'எழுபத்தி ', 'எண்பத்தி ', 'தொண்ணூற்றி '
+  ];
+
+  const hundredsAlone = [
+    '', 'நூறு', 'இருநூறு', 'முந்நூறு', 'நானூறு', 'ஐந்நூறு', 'அறுநூறு', 'எழுநூறு', 'எண்ணூறு', 'தொள்ளாயிரம்'
+  ];
+
+  const hundredsPrefix = [
+    '', 'நூற்று ', 'இருநூற்று ', 'முந்நூற்று ', 'நானூற்று ', 'ஐந்நூற்று ', 'அறுநூற்று ', 'எழுநூற்று ', 'எண்ணூற்று ', 'தொள்ளாயிரத்து '
+  ];
+
+  function convertUnder1000(val) {
+    let str = '';
+    const h = Math.floor(val / 100);
+    const rem = val % 100;
+    if (h > 0) {
+      if (rem === 0) str += hundredsAlone[h];
+      else str += hundredsPrefix[h];
+    }
+    if (rem > 0) {
+      if (rem < 20) str += ones[rem];
+      else {
+        const t = Math.floor(rem / 10);
+        const u = rem % 10;
+        if (u === 0) str += tensAlone[t];
+        else str += tensPrefix[t] + ones[u];
+      }
+    }
+    return str.trim();
+  }
+
+  let words = '';
+  let rem = n;
+
+  if (rem >= 10000000) {
+    const cr = Math.floor(rem / 10000000);
+    rem %= 10000000;
+    const crWords = convertUnder1000(cr);
+    words += (crWords === 'ஒன்று' ? 'ஒரு கோடி ' : crWords + ' கோடி ') + (rem > 0 ? 'யே ' : '');
+  }
+
+  if (rem >= 100000) {
+    const lk = Math.floor(rem / 100000);
+    rem %= 100000;
+    const lkWords = convertUnder1000(lk);
+    if (rem === 0) words += (lkWords === 'ஒன்று' ? 'ஒரு லட்சம் ' : lkWords + ' லட்சம் ');
+    else words += (lkWords === 'ஒன்று' ? 'ஒரு லட்சத்து ' : lkWords + ' லட்சத்து ');
+  }
+
+  if (rem >= 1000) {
+    const th = Math.floor(rem / 1000);
+    rem %= 1000;
+    if (th === 1) words += rem > 0 ? 'ஆயிரத்து ' : 'ஆயிரம் ';
+    else if (th === 2) words += rem > 0 ? 'இரண்டாயிரத்து ' : 'இரண்டாயிரம் ';
+    else if (th === 3) words += rem > 0 ? 'மூவாயிரத்து ' : 'மூவாயிரம் ';
+    else if (th === 4) words += rem > 0 ? 'நான்காயிரத்து ' : 'நான்காயிரம் ';
+    else if (th === 5) words += rem > 0 ? 'ஐந்தாயிரத்து ' : 'ஐந்தாயிரம் ';
+    else if (th === 6) words += rem > 0 ? 'ஆறாயிரத்து ' : 'ஆறாயிரம் ';
+    else if (th === 7) words += rem > 0 ? 'ஏழாயிரத்து ' : 'ஏழாயிரம் ';
+    else if (th === 8) words += rem > 0 ? 'எட்டாயிரத்து ' : 'எட்டாயிரம் ';
+    else if (th === 9) words += rem > 0 ? 'ஒன்பதாயிரத்து ' : 'ஒன்பதாயிரம் ';
+    else {
+      const thWords = convertUnder1000(th);
+      words += thWords + (rem > 0 ? ' ஆயிரத்து ' : ' ஆயிரம் ');
+    }
+  }
+
+  if (rem > 0) {
+    words += convertUnder1000(rem);
+  }
+
+  return words.replace(/\s+/g, ' ').trim();
+}
+
+export function amountInWords(num, lang = 'en') {
+  const n = Math.round(Number(num) || 0);
+
+  if (lang === 'ta') {
+    if (n <= 0) return 'ரூபாய் பூஜ்ஜியம் மட்டும்';
+    const taWords = numberToTamilWords(n);
+    return `ரூபாய் ${taWords} மட்டும்`;
+  }
+
   if (n <= 0) return 'Rupees Zero Only';
 
   const ones = [

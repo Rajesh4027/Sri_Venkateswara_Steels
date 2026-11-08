@@ -4,7 +4,7 @@ import LOGO from '../assets/logo.png';
 import { inr, fmt, KEY } from '../utils';
 import { useLanguage } from '../context/LanguageContext';
 
-const CURRENT_APP_VERSION = 'v2.7.0';
+const CURRENT_APP_VERSION = 'v2.8.0';
 const GITHUB_REPO = 'Rajesh4027/Sri_Venkateswara_Steels';
 
 function parseSemVer(v) {
@@ -49,6 +49,55 @@ export default function SettingsPage({
   }));
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updateStatus, setUpdateStatus] = useState(null);
+
+  const [storageInfo, setStorageInfo] = useState({
+    imagesDir: '%AppData%\\Sri Venkateswara Steels\\Bill_Images',
+    filesCount: 0,
+    totalSizeMb: '0.00'
+  });
+  const [syncingImages, setSyncingImages] = useState(false);
+
+  // Load storage info on mount
+  useEffect(() => {
+    if (window.electronAPI?.getStorageInfo) {
+      window.electronAPI.getStorageInfo().then(info => {
+        if (info) setStorageInfo(info);
+      }).catch(() => {});
+    }
+  }, []);
+
+  const handleOpenImagesFolder = async () => {
+    if (window.electronAPI?.openImagesFolder) {
+      await window.electronAPI.openImagesFolder();
+      if (toast) toast('📂 Opened Bill Images folder in Windows Explorer');
+    } else {
+      if (toast) toast(`Folder location: ${storageInfo.imagesDir}`);
+    }
+  };
+
+  const handleSyncImagesToDisk = async () => {
+    if (syncingImages) return;
+    setSyncingImages(true);
+    if (window.electronAPI?.syncAllImages) {
+      try {
+        const res = await window.electronAPI.syncAllImages(inwardInvoices);
+        setSyncingImages(false);
+        if (res && res.success) {
+          if (toast) toast(`✓ Successfully saved ${res.savedCount} bill photos to local disk folder!`);
+          if (window.electronAPI?.getStorageInfo) {
+            const updated = await window.electronAPI.getStorageInfo();
+            if (updated) setStorageInfo(updated);
+          }
+        }
+      } catch (e) {
+        setSyncingImages(false);
+        if (toast) toast('Failed to sync images to disk');
+      }
+    } else {
+      setSyncingImages(false);
+      if (toast) toast('Local disk folder is active in Desktop software');
+    }
+  };
   const jsonInputRef = useRef(null);
   const csvInputRef = useRef(null);
 
@@ -143,7 +192,8 @@ export default function SettingsPage({
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    toast(`✓ Complete ERP Backup exported! (${items.length} stocks, ${bills.length} issue bills, ${inwardInvoices.length} supplier invoices)`);
+    const imgCount = inwardInvoices.filter(i => !!i.billImage).length;
+    toast(`✓ Complete ERP Backup exported! (${items.length} stocks, ${bills.length} issue bills, ${inwardInvoices.length} invoices with ${imgCount} bill photos)`);
   };
 
   // ── JSON Full ERP Backup Restore ──
@@ -208,6 +258,17 @@ export default function SettingsPage({
         if (importedSettings) {
           setForm(importedSettings);
           setSettings(importedSettings);
+        }
+
+        // Auto-sync all restored bill images to local disk folder
+        if (window.electronAPI?.syncAllImages && Array.isArray(importedInvoices)) {
+          window.electronAPI.syncAllImages(importedInvoices).then(res => {
+            if (res && res.savedCount > 0) {
+              if (window.electronAPI?.getStorageInfo) {
+                window.electronAPI.getStorageInfo().then(info => { if (info) setStorageInfo(info); });
+              }
+            }
+          }).catch(() => {});
         }
 
         // Direct write to localStorage for immediate persistence
@@ -815,32 +876,102 @@ export default function SettingsPage({
               Data Storage &amp; Backup Manager
             </div>
 
-            {/* Windows Safe Storage Path Banner */}
+            {/* Windows Safe Storage & Images Folder Banner */}
             <div style={{
               background: '#fffdf5',
-              border: '1px solid #fef08a',
-              borderRadius: 12,
-              padding: '12px 16px',
+              border: '1.5px solid #fef08a',
+              borderRadius: 14,
+              padding: '16px 18px',
               marginBottom: 16
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 800, color: '#854d0e', textTransform: 'uppercase', letterSpacing: '.04em' }}>
-                <span>📁</span> Windows Safe Storage Path:
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 800, color: '#854d0e', textTransform: 'uppercase', letterSpacing: '.04em' }}>
+                  <span>📁</span> Windows Data &amp; Images Storage Folder:
+                </div>
+                <span style={{
+                  fontSize: 10.5,
+                  fontWeight: 800,
+                  padding: '3px 9px',
+                  borderRadius: 99,
+                  background: '#dcfce7',
+                  color: '#166534',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4
+                }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e' }} /> Local Disk Active
+                </span>
               </div>
+
               <div style={{
-                fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
-                fontSize: 12.5,
+                fontFamily: "'Plus Jakarta Sans', monospace, sans-serif",
+                fontSize: 12,
                 fontWeight: 700,
                 color: '#0f172a',
-                padding: '7px 10px',
+                padding: '8px 12px',
                 background: '#fff',
                 border: '1px solid #e2e8f0',
                 borderRadius: 8,
-                marginTop: 6
+                marginTop: 6,
+                wordBreak: 'break-all'
               }}>
-                {form.windowsStoragePath || '%AppData%\\Sri Venkateswara Steels\\Data'}
+                {storageInfo.imagesDir || '%AppData%\\Sri Venkateswara Steels\\Bill_Images'}
               </div>
-              <div style={{ fontSize: 11.5, color: '#713f12', marginTop: 6, lineHeight: 1.4 }}>
-                App data (Stock, Invoices, Issue Slips, Categories, Settings) is automatically stored in the Windows User AppData folder. This ensures seamless read/write access without requiring Administrator rights when installed in Program Files.
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, flexWrap: 'wrap', gap: 8 }}>
+                <div style={{ fontSize: 12, color: '#713f12', fontWeight: 600 }}>
+                  🖼️ <b>{storageInfo.filesCount}</b> Bill image proofs saved ({storageInfo.totalSizeMb} MB on disk)
+                </div>
+
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button
+                    type="button"
+                    onClick={handleOpenImagesFolder}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '6px 14px',
+                      background: 'linear-gradient(135deg, var(--navy), #1C3358)',
+                      color: 'var(--gold2)',
+                      border: '1.5px solid var(--gold)',
+                      borderRadius: 8,
+                      fontSize: 12,
+                      fontWeight: 800,
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease'
+                    }}
+                    title="Open the physical images folder directly in Windows File Explorer"
+                  >
+                    <span>📂</span> Open Images Folder
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={syncingImages}
+                    onClick={handleSyncImagesToDisk}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '6px 12px',
+                      background: '#fff',
+                      color: '#0f172a',
+                      border: '1px solid #cbd5e1',
+                      borderRadius: 8,
+                      fontSize: 12,
+                      fontWeight: 700,
+                      cursor: syncingImages ? 'wait' : 'pointer'
+                    }}
+                    title="Save all attached invoice bill images to local disk folder"
+                  >
+                    <span>💾</span> {syncingImages ? 'Saving...' : 'Sync to Disk'}
+                  </button>
+                </div>
+              </div>
+
+              <div style={{ fontSize: 11, color: '#854d0e', marginTop: 10, lineHeight: 1.4, borderTop: '1px dashed #fef08a', paddingTop: 8 }}>
+                💡 <b>Multi-Computer Migration:</b> When you install on another PC, simply click <b>Restore Backup (.json)</b> below. All invoices and bill image proofs are automatically extracted and saved into the new computer's local disk folder!
               </div>
             </div>
 

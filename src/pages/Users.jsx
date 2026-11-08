@@ -279,27 +279,307 @@ export default function Users({ users, setUsers, currentUser, toast }) {
         </div>
       </div>
 
-      {/* KPI Stats Strip */}
-      <div className="four" style={{ gap: 14, marginBottom: 20 }}>
-        <div className="stat-card">
-          <small className="mut">{t('totalUsersCount')}</small>
-          <div className="stat-val" style={{ color: 'var(--navy)' }}>{stats.total}</div>
-          <small className="mut">Registered accounts</small>
+      {/* KPI Stats Cards */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))',
+        gap: 16,
+        marginBottom: 22
+      }}>
+        {/* Card 1: Total Users */}
+        <div
+          style={{
+            background: '#fff',
+            borderRadius: 16,
+            border: '1.5px solid #e2e8f0',
+            padding: '18px 20px',
+            boxShadow: '0 2px 8px -2px rgba(15, 23, 42, 0.05), 0 1px 3px rgba(0,0,0,0.02)',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            transition: 'all 0.2s ease',
+            position: 'relative',
+            overflow: 'hidden'
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.transform = 'translateY(-2px)';
+            e.currentTarget.style.boxShadow = '0 8px 20px -4px rgba(15, 23, 42, 0.1), 0 2px 6px rgba(0,0,0,0.04)';
+            e.currentTarget.style.borderColor = 'var(--navy2)';
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = '0 2px 8px -2px rgba(15, 23, 42, 0.05), 0 1px 3px rgba(0,0,0,0.02)';
+            e.currentTarget.style.borderColor = '#e2e8f0';
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <span style={{
+              fontSize: 12,
+              fontWeight: 700,
+              color: 'var(--mut)',
+              textTransform: 'uppercase',
+              letterSpacing: '.05em'
+            }}>
+              {t('totalUsersCount')}
+            </span>
+            <div style={{
+              width: 38,
+              height: 38,
+              borderRadius: 10,
+              background: '#F1F5F9',
+              color: 'var(--navy)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              border: '1px solid #E2E8F0'
+            }}>
+              <Ic n="users" s={18} />
+            </div>
+          </div>
+          <div style={{
+            fontSize: 32,
+            fontWeight: 800,
+            color: 'var(--navy)',
+            lineHeight: 1,
+            letterSpacing: '-.03em',
+            margin: '2px 0 8px',
+            fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif"
+          }}>
+            {stats.total}
+          </div>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            fontSize: 12,
+            fontWeight: 600,
+            color: 'var(--mut)'
+          }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--navy)' }} />
+            Registered accounts
+          </div>
         </div>
-        <div className="stat-card">
-          <small className="mut">{t('activeUsersCount')}</small>
-          <div className="stat-val" style={{ color: 'var(--grn)' }}>{stats.active}</div>
-          <small className="mut">Ready to sign in</small>
+
+        {/* Card 2: Active Users */}
+        <div
+          style={{
+            background: 'linear-gradient(180deg, #FFFFFF 0%, #F0FDF4 100%)',
+            borderRadius: 16,
+            border: '1.5px solid #BBF7D0',
+            padding: '18px 20px',
+            boxShadow: '0 2px 8px -2px rgba(15, 23, 42, 0.05), 0 1px 3px rgba(0,0,0,0.02)',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            transition: 'all 0.2s ease',
+            position: 'relative',
+            overflow: 'hidden'
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.transform = 'translateY(-2px)';
+            e.currentTarget.style.boxShadow = '0 8px 20px -4px rgba(22, 163, 74, 0.15), 0 2px 6px rgba(0,0,0,0.04)';
+            e.currentTarget.style.borderColor = '#86EFAC';
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = '0 2px 8px -2px rgba(15, 23, 42, 0.05), 0 1px 3px rgba(0,0,0,0.02)';
+            e.currentTarget.style.borderColor = '#BBF7D0';
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <span style={{
+              fontSize: 12,
+              fontWeight: 700,
+              color: '#166534',
+              textTransform: 'uppercase',
+              letterSpacing: '.05em'
+            }}>
+              {t('activeUsersCount')}
+            </span>
+            <div style={{
+              width: 38,
+              height: 38,
+              borderRadius: 10,
+              background: '#DCFCE7',
+              color: '#166534',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              border: '1px solid #86EFAC'
+            }}>
+              <Ic n="check" s={18} />
+            </div>
+          </div>
+          <div style={{
+            fontSize: 32,
+            fontWeight: 800,
+            color: '#16A34A',
+            lineHeight: 1,
+            letterSpacing: '-.03em',
+            margin: '2px 0 8px',
+            fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif"
+          }}>
+            {stats.active}
+          </div>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            fontSize: 12,
+            fontWeight: 700,
+            color: '#15803D'
+          }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22C55E' }} />
+            Ready to sign in
+          </div>
         </div>
-        <div className="stat-card">
-          <small className="mut">{t('administratorsCount')}</small>
-          <div className="stat-val" style={{ color: 'var(--gold)' }}>{stats.admins}</div>
-          <small className="mut">Full system privileges</small>
+
+        {/* Card 3: Administrators */}
+        <div
+          style={{
+            background: 'linear-gradient(180deg, #FFFFFF 0%, #FFFDF5 100%)',
+            borderRadius: 16,
+            border: '1.5px solid #FEF08A',
+            padding: '18px 20px',
+            boxShadow: '0 2px 8px -2px rgba(15, 23, 42, 0.05), 0 1px 3px rgba(0,0,0,0.02)',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            transition: 'all 0.2s ease',
+            position: 'relative',
+            overflow: 'hidden'
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.transform = 'translateY(-2px)';
+            e.currentTarget.style.boxShadow = '0 8px 20px -4px rgba(217, 119, 6, 0.15), 0 2px 6px rgba(0,0,0,0.04)';
+            e.currentTarget.style.borderColor = 'var(--gold)';
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = '0 2px 8px -2px rgba(15, 23, 42, 0.05), 0 1px 3px rgba(0,0,0,0.02)';
+            e.currentTarget.style.borderColor = '#FEF08A';
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <span style={{
+              fontSize: 12,
+              fontWeight: 700,
+              color: '#854D0E',
+              textTransform: 'uppercase',
+              letterSpacing: '.05em'
+            }}>
+              {t('administratorsCount')}
+            </span>
+            <div style={{
+              width: 38,
+              height: 38,
+              borderRadius: 10,
+              background: '#FEF3C7',
+              color: '#92400E',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              border: '1px solid #FCD34D'
+            }}>
+              <Ic n="shield" s={18} />
+            </div>
+          </div>
+          <div style={{
+            fontSize: 32,
+            fontWeight: 800,
+            color: '#B45309',
+            lineHeight: 1,
+            letterSpacing: '-.03em',
+            margin: '2px 0 8px',
+            fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif"
+          }}>
+            {stats.admins}
+          </div>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            fontSize: 12,
+            fontWeight: 700,
+            color: '#854D0E'
+          }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#F59E0B' }} />
+            Full system privileges
+          </div>
         </div>
-        <div className="stat-card">
-          <small className="mut">{t('storeBillingStaffCount')}</small>
-          <div className="stat-val" style={{ color: 'var(--blue)' }}>{stats.staff}</div>
-          <small className="mut">Operational operators</small>
+
+        {/* Card 4: Store & Billing Staff */}
+        <div
+          style={{
+            background: 'linear-gradient(180deg, #FFFFFF 0%, #EFF6FF 100%)',
+            borderRadius: 16,
+            border: '1.5px solid #BFDBFE',
+            padding: '18px 20px',
+            boxShadow: '0 2px 8px -2px rgba(15, 23, 42, 0.05), 0 1px 3px rgba(0,0,0,0.02)',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            transition: 'all 0.2s ease',
+            position: 'relative',
+            overflow: 'hidden'
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.transform = 'translateY(-2px)';
+            e.currentTarget.style.boxShadow = '0 8px 20px -4px rgba(37, 99, 235, 0.15), 0 2px 6px rgba(0,0,0,0.04)';
+            e.currentTarget.style.borderColor = '#60A5FA';
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = '0 2px 8px -2px rgba(15, 23, 42, 0.05), 0 1px 3px rgba(0,0,0,0.02)';
+            e.currentTarget.style.borderColor = '#BFDBFE';
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <span style={{
+              fontSize: 12,
+              fontWeight: 700,
+              color: '#1E40AF',
+              textTransform: 'uppercase',
+              letterSpacing: '.05em'
+            }}>
+              {t('storeBillingStaffCount')}
+            </span>
+            <div style={{
+              width: 38,
+              height: 38,
+              borderRadius: 10,
+              background: '#DBEAFE',
+              color: '#1E40AF',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              border: '1px solid #93C5FD'
+            }}>
+              <Ic n="store" s={18} />
+            </div>
+          </div>
+          <div style={{
+            fontSize: 32,
+            fontWeight: 800,
+            color: '#2563EB',
+            lineHeight: 1,
+            letterSpacing: '-.03em',
+            margin: '2px 0 8px',
+            fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif"
+          }}>
+            {stats.staff}
+          </div>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            fontSize: 12,
+            fontWeight: 700,
+            color: '#1D4ED8'
+          }}>
+            <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#3B82F6' }} />
+            Operational operators
+          </div>
         </div>
       </div>
 

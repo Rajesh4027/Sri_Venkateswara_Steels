@@ -43,12 +43,12 @@ export default function LoginPage({ users, onLogin, settings }) {
       return;
     }
 
-    // Start 2-second signing-in button animation
+    // Start signing-in button animation and enter dashboard
     setIsAuthenticating(true);
 
     setTimeout(() => {
       onLogin(matched, true);
-    }, 2000);
+    }, 1500);
   };
 
   const handleQuickFill = (user) => {

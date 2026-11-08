@@ -307,7 +307,7 @@ export default function App() {
           <div className="brand-logo-wrap" title={collapsed ? t('expandSidebar') : ''}>
             <img className="brand-logo" src={LOGO} alt="SVS" />
             <div className="brand-expand-overlay" title={t('expandSidebar')}>
-              <Ic n="chevronRight" s={18} />
+              <Ic n="chevronRight" s={20} />
             </div>
           </div>
 
@@ -452,98 +452,57 @@ export default function App() {
         </div>
 
         {/* ── Language Switcher, Zoom Controller & Software Version in Sidebar ── */}
-        {!collapsed ? (
-          <div style={{ padding: '0 10px 10px', display: 'flex', flexDirection: 'column', gap: 7, width: '100%', boxSizing: 'border-box' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flexWrap: 'wrap', width: '100%' }}>
-              <LanguageToggle />
-              <SoftwareVersionAlert settings={settings} toast={toast} style={{ padding: '5px 12px', fontSize: 12 }} />
-            </div>
-            <ZoomController toast={toast} style={{ width: '100%', justifyContent: 'space-between', boxSizing: 'border-box', padding: '3px 8px' }} />
-          </div>
-        ) : (
-          <div style={{ padding: '0 6px 10px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, width: '100%', boxSizing: 'border-box' }}>
-            <LanguageToggle compact />
-            <SoftwareVersionAlert compact settings={settings} toast={toast} />
-            <ZoomController compact toast={toast} />
-          </div>
-        )}
+        <div className={`side-controls ${collapsed ? 'collapsed' : ''}`}>
+          {!collapsed ? (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, flexWrap: 'wrap', width: '100%' }}>
+                <LanguageToggle />
+                <SoftwareVersionAlert settings={settings} toast={toast} style={{ padding: '5px 12px', fontSize: 12 }} />
+              </div>
+              <ZoomController toast={toast} style={{ width: '100%', justifyContent: 'space-between', boxSizing: 'border-box', padding: '3px 8px' }} />
+            </>
+          ) : (
+            <>
+              <LanguageToggle compact />
+              <SoftwareVersionAlert compact settings={settings} toast={toast} />
+              <ZoomController compact toast={toast} />
+            </>
+          )}
+        </div>
 
         {/* ── Footer / User Profile & Sign Out ── */}
-        {!collapsed ? (
-          <div className="foot" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div
-              className="av"
-              style={{
-                width: 34,
-                height: 34,
-                fontSize: 13,
-                flexShrink: 0,
-                background: currentUser.role === 'Admin' ? 'var(--gold)' : 'var(--navy)',
-                color: '#fff',
-                fontWeight: 800
-              }}
-            >
-              {currentUser.name ? currentUser.name[0].toUpperCase() : 'U'}
-            </div>
-            <div className="t" style={{ minWidth: 0, flex: 1, overflow: 'hidden' }}>
-              <b style={{ display: 'block', fontSize: 13, color: 'var(--navy)', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
-                {currentUser.name}
-              </b>
-              <div className="sub" style={{ fontSize: 11, color: 'var(--mut)', whiteSpace: 'nowrap' }}>
-                {currentUser.role} &middot; @{currentUser.username}
-              </div>
-            </div>
-            <button
-              type="button"
-              className="ib"
-              onClick={() => setShowLogoutConfirm(true)}
-              title={t('signOutTitle')}
-              style={{ color: 'var(--red)', width: 30, height: 30, flexShrink: 0 }}
-              aria-label={t('signOut')}
-            >
-              <Ic n="logout" s={15} />
-            </button>
+        <div className={`foot ${collapsed ? 'collapsed-foot' : ''}`}>
+          <div
+            className="av"
+            style={{
+              width: 34,
+              height: 34,
+              fontSize: 13,
+              flexShrink: 0,
+              background: currentUser.role === 'Admin' ? 'var(--gold)' : 'var(--navy)',
+              color: '#fff',
+              fontWeight: 800
+            }}
+            title={`${currentUser.name} (${currentUser.role})`}
+          >
+            {currentUser.name ? currentUser.name[0].toUpperCase() : 'U'}
           </div>
-        ) : (
-          <div className="foot collapsed-foot" style={{ padding: '8px 4px 12px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, borderTop: '1px solid var(--line)', width: '100%', boxSizing: 'border-box' }}>
-            <div
-              className="av"
-              style={{
-                width: 34,
-                height: 34,
-                fontSize: 13,
-                flexShrink: 0,
-                background: currentUser.role === 'Admin' ? 'var(--gold)' : 'var(--navy)',
-                color: '#fff',
-                fontWeight: 800
-              }}
-              title={`${currentUser.name} (${currentUser.role})`}
-            >
-              {currentUser.name ? currentUser.name[0].toUpperCase() : 'U'}
+          <div className="t">
+            <b>{currentUser.name}</b>
+            <div className="sub">
+              {currentUser.role} &middot; @{currentUser.username}
             </div>
-            <button
-              type="button"
-              className="ib"
-              onClick={() => setShowLogoutConfirm(true)}
-              title={t('signOutTitle')}
-              style={{
-                color: 'var(--red)',
-                width: 34,
-                height: 34,
-                borderRadius: 9,
-                background: '#FEF2F2',
-                borderColor: '#FEE2E2',
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer'
-              }}
-              aria-label={t('signOut')}
-            >
-              <Ic n="logout" s={16} />
-            </button>
           </div>
-        )}
+          <button
+            type="button"
+            className="ib logout-btn"
+            onClick={() => setShowLogoutConfirm(true)}
+            title={t('signOutTitle')}
+            aria-label={t('signOut')}
+          >
+            <Ic n="logout" s={15} />
+          </button>
+        </div>
       </aside>
 
       {/* Main App Content Area */}

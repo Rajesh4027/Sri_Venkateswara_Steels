@@ -38,7 +38,9 @@ export default function CustomerAutofillInput({
   onChange,
   onSelectCustomer,
   inputStyle = {},
-  containerStyle = {}
+  containerStyle = {},
+  prefixIcon,
+  hideLabel
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -228,8 +230,8 @@ export default function CustomerAutofillInput({
   };
 
   return (
-    <div ref={containerRef} style={{ position: 'relative', ...containerStyle }}>
-      {label && (
+    <div ref={containerRef} style={{ position: 'relative', width: '100%', ...containerStyle }}>
+      {label && !hideLabel && (
         <label className="fl" style={{ marginBottom: 4 }}>
           <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span>{label} {required ? '*' : ''}</span>
@@ -242,7 +244,12 @@ export default function CustomerAutofillInput({
         </label>
       )}
 
-      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', width: '100%' }}>
+        {prefixIcon && (
+          <div style={{ position: 'absolute', left: 10, pointerEvents: 'none', color: '#64748B', display: 'flex', alignItems: 'center', zIndex: 1 }}>
+            <Ic n={prefixIcon} s={15} />
+          </div>
+        )}
         <input
           ref={inputRef}
           className="in"
@@ -261,6 +268,10 @@ export default function CustomerAutofillInput({
           style={{
             width: '100%',
             fontWeight: 700,
+            paddingLeft: prefixIcon ? 34 : 12,
+            height: 38,
+            fontSize: 13,
+            boxSizing: 'border-box',
             ...inputStyle
           }}
         />

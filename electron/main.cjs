@@ -11,6 +11,93 @@ ipcMain.handle('get-app-version', () => {
   return app.getVersion();
 });
 
+// ── Local Disk Image Storage Helpers & Handlers ──
+function getImagesDirectory() {
+  const userData = app.getPath('userData');
+  const dir = path.join(userData, 'Bill_Images');
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  return dir;
+}
+
+ipcMain.handle('get-storage-info', () => {
+  const imagesDir = getImagesDirectory();
+  let filesCount = 0;
+  let totalBytes = 0;
+  try {
+    const files = fs.readdirSync(imagesDir);
+    filesCount = files.length;
+    files.forEach(f => {
+      try {
+        const stat = fs.statSync(path.join(imagesDir, f));
+        totalBytes += stat.size;
+      } catch (e) { }
+    });
+  } catch (e) { }
+  return {
+    userDataPath: app.getPath('userData'),
+    imagesDir: imagesDir,
+    filesCount,
+    totalSizeMb: (totalBytes / (1024 * 1024)).toFixed(2)
+  };
+});
+
+ipcMain.handle('open-images-folder', async () => {
+  const dir = getImagesDirectory();
+  await shell.openPath(dir);
+  return { success: true, path: dir };
+});
+
+ipcMain.handle('save-single-image', async (event, payload) => {
+  try {
+    const { dataUrl, filename, invoiceNo } = payload || {};
+    if (!dataUrl || !dataUrl.startsWith('data:')) {
+      return { success: false, error: 'Invalid data' };
+    }
+    const dir = getImagesDirectory();
+    const matches = dataUrl.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+    if (!matches || matches.length !== 3) {
+      return { success: false, error: 'Malformed base64 data' };
+    }
+    const mimeType = matches[1];
+    const ext = mimeType.includes('png') ? 'png' : (mimeType.includes('webp') ? 'webp' : 'jpg');
+    const safeInv = String(invoiceNo || 'INV').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const cleanName = filename ? filename.replace(/[^a-zA-Z0-9_.-]/g, '_') : `Invoice_${safeInv}_${Date.now()}.${ext}`;
+    const filePath = path.join(dir, cleanName);
+    fs.writeFileSync(filePath, Buffer.from(matches[2], 'base64'));
+    return { success: true, filePath, filename: cleanName, imagesDir: dir };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('sync-all-images', async (event, invoices = []) => {
+  try {
+    const dir = getImagesDirectory();
+    let savedCount = 0;
+    if (Array.isArray(invoices)) {
+      for (const inv of invoices) {
+        if (inv.billImage && typeof inv.billImage === 'string' && inv.billImage.startsWith('data:')) {
+          const matches = inv.billImage.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+          if (matches && matches.length === 3) {
+            const mimeType = matches[1];
+            const ext = mimeType.includes('png') ? 'png' : 'jpg';
+            const safeInv = String(inv.inv || inv.id || 'INV').replace(/[^a-zA-Z0-9_-]/g, '_');
+            const filename = `Invoice_${safeInv}.${ext}`;
+            const filePath = path.join(dir, filename);
+            fs.writeFileSync(filePath, Buffer.from(matches[2], 'base64'));
+            savedCount++;
+          }
+        }
+      }
+    }
+    return { success: true, savedCount, imagesDir: dir };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
 ipcMain.handle('check-github-release', async () => {
   return new Promise((resolve) => {
     const options = {

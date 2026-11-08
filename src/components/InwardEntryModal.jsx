@@ -98,9 +98,23 @@ export default function InwardEntryModal({
     const file = e.target.files && e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = evt => {
-      setBillImage(evt.target.result);
-      toast('Bill image uploaded');
+    reader.onload = async evt => {
+      const dataUrl = evt.target.result;
+      setBillImage(dataUrl);
+      if (window.electronAPI?.saveSingleImage) {
+        try {
+          await window.electronAPI.saveSingleImage({
+            dataUrl,
+            invoiceNo: invNo || 'Draft',
+            filename: file.name
+          });
+          toast('✓ Bill photo saved to local disk & attached');
+        } catch (err) {
+          toast('Bill image uploaded');
+        }
+      } else {
+        toast('Bill image uploaded');
+      }
     };
     reader.readAsDataURL(file);
   };
