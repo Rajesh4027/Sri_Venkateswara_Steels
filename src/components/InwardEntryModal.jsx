@@ -516,10 +516,11 @@ export default function InwardEntryModal({
                                 setRow(idx, { nameTa: text });
                               }}
                               onSelectExisting={it => {
+                                const autoTa = it.nameTa || it.tamilName || inferTamilName(it.name) || '';
                                 setRow(idx, {
                                   id: it.id,
                                   name: it.name,
-                                  nameTa: it.nameTa || text || inferTamilName(it.name),
+                                  nameTa: autoTa,
                                   isNew: false,
                                   cat: it.cat || (categories && categories[0]) || 'Steel',
                                   hsn: it.hsn || '',
@@ -527,6 +528,18 @@ export default function InwardEntryModal({
                                   rate: it.rate || 0,
                                   qty: row.qty || 1,
                                   gst: (it.gst !== undefined && it.gst !== null && !isNaN(it.gst)) ? Number(it.gst) : 18
+                                });
+                              }}
+                              onClear={() => {
+                                setRow(idx, {
+                                  id: '',
+                                  name: '',
+                                  nameTa: '',
+                                  isNew: false,
+                                  hsn: '',
+                                  rate: '',
+                                  qty: 1,
+                                  gst: 18
                                 });
                               }}
                             />

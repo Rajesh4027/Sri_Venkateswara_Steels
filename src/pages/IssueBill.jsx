@@ -213,10 +213,6 @@ export default function IssueBill({ items, bills, setBills, setItems, preset, to
     return [];
   });
 
-  const isVehicleComposing = useRef(false);
-  const isAddressComposing = useRef(false);
-  const isSearchComposing = useRef(false);
-
   // Global Ctrl + K search shortcut listener
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -926,27 +922,7 @@ export default function IssueBill({ items, bills, setBills, setItems, preset, to
               type="text"
               placeholder="Search customers, materials, bills..."
               value={searchQuery}
-              onCompositionStart={() => {
-                isSearchComposing.current = true;
-              }}
-              onCompositionUpdate={() => {
-                isSearchComposing.current = true;
-              }}
-              onCompositionEnd={e => {
-                isSearchComposing.current = false;
-                setSearchQuery(e.target.value);
-              }}
-              onChange={e => {
-                if (isSearchComposing.current || e.nativeEvent?.isComposing) return;
-                setSearchQuery(e.target.value);
-              }}
-              onBlur={e => {
-                isSearchComposing.current = false;
-                setSearchQuery(e.target.value);
-              }}
-              onKeyDown={e => {
-                if (isSearchComposing.current || e.nativeEvent?.isComposing || e.keyCode === 229 || e.key === 'Process') return;
-              }}
+              onChange={e => setSearchQuery(e.target.value)}
             />
             <span className="kbd-shortcut">Ctrl + K</span>
           </div>
@@ -1222,35 +1198,9 @@ export default function IssueBill({ items, bills, setBills, setItems, preset, to
                   className="in with-prefix"
                   placeholder={t('toAddressPlaceholder')}
                   value={h.address || ''}
-                  onCompositionStart={() => {
-                    isAddressComposing.current = true;
-                  }}
-                  onCompositionUpdate={() => {
-                    isAddressComposing.current = true;
-                  }}
-                  onCompositionEnd={e => {
-                    isAddressComposing.current = false;
-                    setView(null);
-                    setH(prev => ({ ...prev, address: e.target.value }));
-                  }}
                   onChange={e => {
-                    if (isAddressComposing.current || e.nativeEvent?.isComposing) {
-                      return;
-                    }
                     setView(null);
                     setH(prev => ({ ...prev, address: e.target.value }));
-                  }}
-                  onBlur={e => {
-                    isAddressComposing.current = false;
-                    const val = e.target.value || '';
-                    if (val !== (h.address || '')) {
-                      setH(prev => ({ ...prev, address: val }));
-                    }
-                  }}
-                  onKeyDown={e => {
-                    if (isAddressComposing.current || e.nativeEvent?.isComposing || e.keyCode === 229 || e.key === 'Process') {
-                      return;
-                    }
                   }}
                   style={{ height: 38, fontSize: 13, fontWeight: 500, width: '100%', boxSizing: 'border-box', paddingRight: h.address ? 28 : 12 }}
                 />
@@ -1295,33 +1245,25 @@ export default function IssueBill({ items, bills, setBills, setItems, preset, to
                   placeholder={t('vehiclePlaceholder')}
                   style={{ textTransform: 'uppercase', fontWeight: 700, height: 38, fontSize: 13, width: '100%', boxSizing: 'border-box', paddingRight: h.veh ? 28 : 12 }}
                   value={h.veh || ''}
-                  onCompositionStart={() => {
-                    isVehicleComposing.current = true;
-                  }}
-                  onCompositionUpdate={() => {
-                    isVehicleComposing.current = true;
-                  }}
-                  onCompositionEnd={e => {
-                    isVehicleComposing.current = false;
-                    setView(null);
-                    setH(prev => ({ ...prev, veh: e.target.value }));
-                  }}
                   onChange={e => {
-                    if (isVehicleComposing.current || e.nativeEvent?.isComposing) {
-                      return;
-                    }
                     setView(null);
-                    setH(prev => ({ ...prev, veh: e.target.value }));
-                  }}
-                  onBlur={e => {
-                    isVehicleComposing.current = false;
-                    const val = (e.target.value || '').trim().toUpperCase();
-                    setH(prev => ({ ...prev, veh: val }));
+                    const cleaned = e.target.value.replace(/[^a-zA-Z0-9\s-]/g, '').toUpperCase();
+                    setH(prev => ({ ...prev, veh: cleaned }));
                   }}
                   onKeyDown={e => {
-                    if (isVehicleComposing.current || e.nativeEvent?.isComposing || e.keyCode === 229 || e.key === 'Process') {
+                    if (
+                      ['Backspace', 'Delete', 'Tab', 'Escape', 'Enter', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key) ||
+                      e.ctrlKey || e.metaKey
+                    ) {
                       return;
                     }
+                    if (!/^[a-zA-Z0-9\s-]$/.test(e.key)) {
+                      e.preventDefault();
+                    }
+                  }}
+                  onBlur={e => {
+                    const val = (e.target.value || '').trim().replace(/[^A-Z0-9\s-]/g, '').toUpperCase();
+                    setH(prev => ({ ...prev, veh: val }));
                   }}
                 />
                 {h.veh && (

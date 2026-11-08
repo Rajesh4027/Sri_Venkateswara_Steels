@@ -41,6 +41,28 @@ export const DEFAULT_UOMS_LIST = [
   'BUNDLE'
 ];
 
+/**
+ * Returns current application zoom factor (e.g. 0.9 for 90%)
+ * Used to properly position portal dropdowns across all zoom levels without offsets.
+ */
+export function getAppZoomFactor() {
+  try {
+    const raw = document.documentElement.style.zoom;
+    if (raw) {
+      const num = parseFloat(raw);
+      if (!isNaN(num) && num > 0) {
+        return raw.includes('%') ? num / 100 : num;
+      }
+    }
+    const cssVar = getComputedStyle(document.documentElement).getPropertyValue('--app-zoom-factor');
+    if (cssVar) {
+      const num = parseFloat(cssVar);
+      if (!isNaN(num) && num > 0) return num;
+    }
+  } catch (e) { }
+  return 1;
+}
+
 export function inferTamilName(nameEn) {
   if (!nameEn) return '';
   const n = String(nameEn).toUpperCase();
@@ -57,10 +79,11 @@ export function inferTamilName(nameEn) {
   if (/SPADE/i.test(n)) return 'மண்வெட்டி கைப்பிடியுடன்';
   if (/SAFETY SHOE/i.test(n)) return 'பாதுகாப்பு காலணி (Safety Shoe)';
   if (/COVER BLOCK/i.test(n)) return 'கவர் பிளாக் (Cover Block)';
-  if (/NAILS.*1.*1\/2|NAILS.*11\/2/i.test(n)) return 'ஆணி 1 1/2 அங்குலம்';
-  if (/NAILS.*2.*1\/2|NAILS.*21\/2/i.test(n)) return 'ஆணி 2 1/2 அங்குலம்';
+  if (/NAILS.*1.*1\/2|NAILS.*11\/2/i.test(n)) return 'ஆணி 11/2';
+  if (/NAILS.*2.*1\/2|NAILS.*21\/2/i.test(n)) return 'ஆணி 21/2';
   if (/NAILS.*2\s*X\s*2/i.test(n)) return 'ஆணி 2X2 வயர் ஆணி';
-  if (/NAILS|SCREW/i.test(n)) return 'இரும்பு ஆணி (Nails)';
+  if (/NAILS/i.test(n)) return 'ஆணி';
+  if (/SCREW/i.test(n)) return 'குத்து ஊசி';
   if (/CEMENT/i.test(n)) return 'சிமெண்ட் மூட்டை (Cement)';
   if (/SAND/i.test(n)) return 'மணல் (Sand)';
   if (/HAMMER/i.test(n)) return 'சுத்தியல் (Hammer)';
@@ -86,13 +109,11 @@ export function inferEnglishName(nameTa) {
   if (/மண்வெட்டி/i.test(s)) return 'Spade with Handle';
   if (/காலணி|ஷூ/i.test(s)) return 'Safety Shoes';
   if (/கவர்\s*பிளாக்/i.test(s)) return 'Cover Block';
-  if (/ஆணி.*1.*1\/2|ஆணி.*11\/2/i.test(s)) return 'Wire Nails 1 1/2"';
-  if (/ஆணி.*2.*1\/2|ஆணி.*21\/2/i.test(s)) return 'Wire Nails 2 1/2"';
-  if (/ஆணி.*2\s*X\s*2/i.test(s)) return 'Wire Nails 2X2';
-  if (/ஆணி|இரும்பு\s*ஆணி/i.test(s)) {
-    const numPart = s.replace(/[^\d/ ]/g, '').trim();
-    return numPart ? `Wire Nails ${numPart}"` : 'Wire Nails';
-  }
+  if (/ஆணி.*1.*1\/2|ஆணி.*11\/2/i.test(s)) return 'Nails 11/2';
+  if (/ஆணி.*2.*1\/2|ஆணி.*21\/2/i.test(s)) return 'Nails 21/2';
+  if (/ஆணி.*2\s*X\s*2/i.test(s)) return 'Nails 2X2';
+  if (/ஆணி/i.test(s)) return 'Nails';
+  if (/குத்து\s*ஊசி|திருகாணி/i.test(s)) return 'Screw';
   if (/சிமெண்ட்/i.test(s)) return 'Cement Bag';
   if (/மணல்/i.test(s)) return 'Sand';
   if (/சுத்தியல்/i.test(s)) return 'Hammer';

@@ -1,5 +1,4 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
-import { createPortal } from 'react-dom';
 import Ic from './Icon';
 import { formatCustomerName } from '../utils';
 
@@ -51,7 +50,6 @@ export default function CustomerAutofillInput({
   const inputRef = useRef(null);
   const listRef = useRef(null);
   const itemRefs = useRef([]);
-  const isComposingRef = useRef(false);
 
   // Compute matching customers
   const matchingCustomers = useMemo(() => {
@@ -156,33 +154,16 @@ export default function CustomerAutofillInput({
   }, [isOpen]);
 
   const handleInputChange = e => {
-    // Prevent state updates mid-IME composition (e.g. Windows Tamil Phonetic layout).
-    // Updating React state while IME is active forces a DOM reconciliation that aborts
-    // the IME buffer, causing characters to duplicate (e.g. V -> Vv, D -> Dd, N -> Nn).
-    if (isComposingRef.current || e.nativeEvent?.isComposing) {
-      return;
+    let val = e.target.value;
+    if (field === 'phone') {
+      // Allow only numbers (0-9)
+      val = val.replace(/[^0-9]/g, '').slice(0, 15);
     }
-    const val = e.target.value;
     onChange(val);
 
     if (val.trim().length > 0) {
       setIsOpen(true);
       setActiveIndex(0);
-      updatePosition();
-    } else {
-      setIsOpen(false);
-    }
-  };
-
-  const handleCompositionEnd = e => {
-    isComposingRef.current = false;
-    const val = e.target.value;
-    onChange(val);
-
-    if (val.trim().length > 0) {
-      setIsOpen(true);
-      setActiveIndex(0);
-      updatePosition();
     } else {
       setIsOpen(false);
     }
@@ -197,9 +178,6 @@ export default function CustomerAutofillInput({
   };
 
   const handleKeyDown = e => {
-    if (isComposingRef.current || e.nativeEvent?.isComposing || e.keyCode === 229 || e.key === 'Process') {
-      return;
-    }
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       if (!isOpen) {
@@ -269,13 +247,6 @@ export default function CustomerAutofillInput({
           type={field === 'phone' ? 'tel' : 'text'}
           placeholder={placeholder}
           value={value}
-          onCompositionStart={() => {
-            isComposingRef.current = true;
-          }}
-          onCompositionUpdate={() => {
-            isComposingRef.current = true;
-          }}
-          onCompositionEnd={handleCompositionEnd}
           onChange={handleInputChange}
           onFocus={() => {
             if ((value || '').trim().length > 0 && matchingCustomers.length > 0) {
@@ -284,20 +255,29 @@ export default function CustomerAutofillInput({
             }
           }}
           onBlur={e => {
-            isComposingRef.current = false;
             const currentVal = e.target.value;
             if (field === 'cust' && currentVal) {
               const formatted = formatCustomerName(currentVal);
               if (formatted !== currentVal) {
                 onChange(formatted);
-              } else if (currentVal !== value) {
-                onChange(currentVal);
               }
-            } else if (currentVal !== value) {
-              onChange(currentVal);
             }
+            setTimeout(() => setIsOpen(false), 200);
           }}
-          onKeyDown={handleKeyDown}
+          onKeyDown={e => {
+            if (field === 'phone') {
+              if (
+                ['Backspace', 'Delete', 'Tab', 'Escape', 'Enter', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key) ||
+                e.ctrlKey || e.metaKey
+              ) {
+                // Allow control keys
+              } else if (!/^[0-9]$/.test(e.key)) {
+                e.preventDefault();
+                return;
+              }
+            }
+            handleKeyDown(e);
+          }}
           autoComplete="off"
           style={{
             width: '100%',
@@ -314,6 +294,10 @@ export default function CustomerAutofillInput({
           <button
             type="button"
             tabIndex={-1}
+            onMouseDown={e => {
+              e.preventDefault();
+              e.stopPropagation();
+            }}
             onClick={() => {
               if (onClearAll) {
                 onClearAll();
@@ -321,7 +305,6 @@ export default function CustomerAutofillInput({
                 onChange('');
               }
               setIsOpen(false);
-              if (inputRef.current) inputRef.current.focus();
             }}
             style={{
               position: 'absolute',
@@ -341,23 +324,24 @@ export default function CustomerAutofillInput({
         )}
       </div>
 
-      {/* Floating Suggestions Dropdown */}
-      {isOpen && matchingCustomers.length > 0 && createPortal(
+      {/* Floating Suggestions Dropdown directly beneath the input */}
+      {isOpen && matchingCustomers.length > 0 && (
         <div
           ref={listRef}
           style={{
-            position: 'fixed',
-            top: coords.top,
-            bottom: coords.bottom,
-            left: coords.left,
-            width: coords.width,
-            maxHeight: coords.maxHeight,
+            position: 'absolute',
+            top: 'calc(100% + 4px)',
+            left: 0,
+            width: '100%',
+            minWidth: 360,
+            maxWidth: 'min(440px, 95vw)',
+            maxHeight: 280,
             overflowY: 'auto',
             background: '#FFFFFF',
             border: '1.5px solid #3B82F6',
             borderRadius: 10,
             boxShadow: '0 10px 25px -3px rgba(15, 23, 42, 0.2), 0 4px 6px -2px rgba(15, 23, 42, 0.05)',
-            zIndex: 9999999,
+            zIndex: 999999,
             boxSizing: 'border-box'
           }}
         >
@@ -463,8 +447,7 @@ export default function CustomerAutofillInput({
               </div>
             );
           })}
-        </div>,
-        document.body
+        </div>
       )}
     </div>
   );

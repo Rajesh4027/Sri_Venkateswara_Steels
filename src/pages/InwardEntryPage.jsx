@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import Ic from '../components/Icon';
 import { InwardMaterialCombobox, InwardTamilMaterialInput } from '../components/MaterialCombobox';
-import { fmt, inr, getSupplierMaterials, getMaterialDisplayName, DEFAULT_CATEGORIES_LIST, DEFAULT_UOMS_LIST } from '../utils';
+import { fmt, inr, getSupplierMaterials, getMaterialDisplayName, inferTamilName, DEFAULT_CATEGORIES_LIST, DEFAULT_UOMS_LIST } from '../utils';
 import { COMMON_HSN_CODES, COMMON_UOMS } from '../data/categories';
 import { useTranslation } from '../context/LanguageContext';
 
@@ -813,10 +813,11 @@ export default function InwardEntryPage({
                             row={row}
                             items={displayItems}
                             onSelectExisting={it => {
+                              const autoTa = it.nameTa || it.tamilName || inferTamilName(it.name) || '';
                               setRow(idx, {
                                 id: it.id,
                                 name: it.name,
-                                nameTa: it.nameTa || it.tamilName || '',
+                                nameTa: autoTa,
                                 isNew: false,
                                 cat: it.cat || (categories && categories[0]) || 'Steel',
                                 hsn: it.hsn || '',
@@ -871,10 +872,11 @@ export default function InwardEntryPage({
                             row={row}
                             items={displayItems}
                             onSelectExisting={it => {
+                              const autoTa = it.nameTa || it.tamilName || inferTamilName(it.name) || '';
                               setRow(idx, {
                                 id: it.id,
                                 name: it.name,
-                                nameTa: it.nameTa || it.tamilName || '',
+                                nameTa: autoTa,
                                 isNew: false,
                                 cat: it.cat || (categories && categories[0]) || 'Steel',
                                 hsn: it.hsn || '',
@@ -886,6 +888,18 @@ export default function InwardEntryPage({
                             }}
                             onChangeTamilName={newTaName => {
                               setRow(idx, { nameTa: newTaName });
+                            }}
+                            onClear={() => {
+                              setRow(idx, {
+                                id: '',
+                                name: '',
+                                nameTa: '',
+                                isNew: false,
+                                hsn: '',
+                                rate: '',
+                                qty: 1,
+                                gst: 18
+                              });
                             }}
                             placeholder={t('tamilNamePlaceholder')}
                           />

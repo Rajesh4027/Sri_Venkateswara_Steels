@@ -1,8 +1,32 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import Ic from './Icon';
-import { fmt, getMaterialDisplayName } from '../utils';
+import { fmt, getMaterialDisplayName, inferTamilName, inferEnglishName, getAppZoomFactor } from '../utils';
 import { useTranslation } from '../context/LanguageContext';
+
+/**
+ * Common filter helper for inward material searches (English and Tamil)
+ */
+function filterInwardMatches(query, items = []) {
+  const q = (query || '').trim().toLowerCase();
+  if (!q) return [];
+  const inferredEn = inferEnglishName(q).toLowerCase();
+  return items.filter(it => {
+    const explicitTa = (it.nameTa || it.tamilName || '').toLowerCase();
+    const inferredTa = inferTamilName(it.name || '').toLowerCase();
+    const nTa = `${explicitTa} ${inferredTa}`.trim();
+    const n = (it.name || '').toLowerCase();
+    const code = (it.id || '').toLowerCase();
+    const hsn = (it.hsn || '').toLowerCase();
+    return (
+      n.includes(q) ||
+      nTa.includes(q) ||
+      code.includes(q) ||
+      hsn.includes(q) ||
+      (inferredEn && n.includes(inferredEn))
+    );
+  });
+}
 
 /**
  * Highlight query match substring inside text
@@ -29,7 +53,8 @@ function highlightMatch(text, query) {
  * Used in InwardEntryPage and InwardEntryModal.
  * - Dropdown opens ONLY when typing AND only if matching existing items exist
  * - NO "add new product" dropdown banner! When user types a new product, they simply Tab/click to the next cell to fill HSN, etc.
- * - Always positioned directly below the input box
+ * - Clean 3-part layout: Left=Stock Name (EN/TA), Center=Stock Quantity, Right=Amount/Rate (No SVS/HSN)
+ * - Always positioned directly below/above the input box using portal with zoom compensation
  * - ArrowDown / ArrowUp to navigate existing items, Enter to select
  */
 export function InwardMaterialCombobox({
@@ -43,12 +68,11 @@ export function InwardMaterialCombobox({
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState(row.name || '');
   const [activeIndex, setActiveIndex] = useState(0);
-  const [coords, setCoords] = useState({ top: 0, left: 0, width: 340 });
+  const [coords, setCoords] = useState({ top: 0, left: 0, width: 340, maxHeight: 260 });
 
   const inputRef = useRef(null);
   const listRef = useRef(null);
   const itemRefs = useRef([]);
-  const isComposingRef = useRef(false);
 
   // Sync external name changes into query when not actively editing
   useEffect(() => {
@@ -59,38 +83,33 @@ export function InwardMaterialCombobox({
 
   // Compute matching existing items based on query (searches both English & Tamil names)
   const matchingItems = useMemo(() => {
-    const q = (query || '').trim().toLowerCase();
-    if (!q) {
-      return [];
-    }
-    return items.filter(it => {
-      const n = (it.name || '').toLowerCase();
-      const nTa = (it.nameTa || it.tamilName || '').toLowerCase();
-      const code = (it.id || '').toLowerCase();
-      const cat = (it.cat || '').toLowerCase();
-      const hsn = (it.hsn || '').toLowerCase();
-      return n.includes(q) || nTa.includes(q) || code.includes(q) || cat.includes(q) || hsn.includes(q);
-    });
+    return filterInwardMatches(query, items);
   }, [query, items]);
 
-  // Reposition floating dropdown dynamically with viewport collision detection
+  // Reposition floating dropdown dynamically with viewport collision detection and zoom factor compensation
   const updatePosition = () => {
     if (!inputRef.current) return;
     const rect = inputRef.current.getBoundingClientRect();
+    const z = getAppZoomFactor();
+
     const spaceBelow = window.innerHeight - rect.bottom;
     const spaceAbove = rect.top;
-    const openUpward = spaceBelow < 240 && spaceAbove > spaceBelow;
-    const availableSpace = openUpward ? spaceAbove - 16 : spaceBelow - 16;
-    const maxHeight = Math.max(160, Math.min(320, availableSpace));
-    const width = Math.max(rect.width, 380);
-    const left = Math.max(10, Math.min(rect.left, window.innerWidth - width - 16));
+    // Prefer opening downward directly under input; only open upward if space below is very small (< 140px)
+    const openUpward = spaceBelow < 140 && spaceAbove > spaceBelow;
+    const availableSpace = openUpward ? spaceAbove - 12 : spaceBelow - 12;
+    const maxHeight = Math.max(120, Math.min(260, availableSpace));
+    const width = Math.max(rect.width, 420);
+    let visualLeft = rect.left;
+    if (visualLeft + width > window.innerWidth - 12) {
+      visualLeft = Math.max(8, window.innerWidth - width - 12);
+    }
 
     setCoords({
-      top: openUpward ? 'auto' : rect.bottom + 4,
-      bottom: openUpward ? (window.innerHeight - rect.top + 4) : 'auto',
-      left,
-      width,
-      maxHeight,
+      top: openUpward ? 'auto' : (rect.bottom + 4) / z,
+      bottom: openUpward ? (window.innerHeight - rect.top + 4) / z : 'auto',
+      left: visualLeft / z,
+      width: width / z,
+      maxHeight: maxHeight / z,
       openUpward
     });
   };
@@ -152,18 +171,15 @@ export function InwardMaterialCombobox({
       onAddNew(trimmed);
     }
 
+    // If already chosen from stock and text matches, do not show dropdown
+    if (row.id && trimmed.toLowerCase() === (row.name || '').trim().toLowerCase()) {
+      setIsOpen(false);
+      return;
+    }
+
     // Filter matching existing items
     if (trimmed.length > 0) {
-      const q = trimmed.toLowerCase();
-      const matches = items.filter(it => {
-        const n = (it.name || '').toLowerCase();
-        const code = (it.id || '').toLowerCase();
-        const cat = (it.cat || '').toLowerCase();
-        const hsn = (it.hsn || '').toLowerCase();
-        return n.includes(q) || code.includes(q) || cat.includes(q) || hsn.includes(q);
-      });
-
-      // ONLY open dropdown if there are matching existing items!
+      const matches = filterInwardMatches(trimmed, items);
       if (matches.length > 0) {
         setIsOpen(true);
         setActiveIndex(0);
@@ -177,22 +193,11 @@ export function InwardMaterialCombobox({
   };
 
   const handleInputChange = e => {
-    if (isComposingRef.current || e.nativeEvent?.isComposing) {
-      return;
-    }
-    processQueryInput(e.target.value);
-  };
-
-  const handleCompositionEnd = e => {
-    isComposingRef.current = false;
     processQueryInput(e.target.value);
   };
 
   // Keyboard navigation
   const handleKeyDown = e => {
-    if (isComposingRef.current || e.nativeEvent?.isComposing || e.keyCode === 229 || e.key === 'Process') {
-      return;
-    }
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       if (!isOpen) {
@@ -244,11 +249,14 @@ export function InwardMaterialCombobox({
     setIsOpen(false);
   };
 
-  const handleClear = () => {
+  const handleClear = (e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     setQuery('');
-    onClear();
     setIsOpen(false);
-    if (inputRef.current) inputRef.current.focus();
+    onClear();
   };
 
   return (
@@ -268,17 +276,23 @@ export function InwardMaterialCombobox({
           }}
           placeholder={placeholder}
           value={query}
-          onCompositionStart={() => {
-            isComposingRef.current = true;
-          }}
-          onCompositionUpdate={() => {
-            isComposingRef.current = true;
-          }}
-          onCompositionEnd={handleCompositionEnd}
           onChange={handleInputChange}
-          onBlur={e => {
-            isComposingRef.current = false;
-            processQueryInput(e.target.value);
+          onFocus={() => {
+            // If already chosen from stock and matches, do not show dropdown
+            if (row.id && query.trim().toLowerCase() === (row.name || '').trim().toLowerCase()) {
+              setIsOpen(false);
+              return;
+            }
+            if (query.trim()) {
+              const matches = filterInwardMatches(query.trim(), items);
+              if (matches.length > 0) {
+                setIsOpen(true);
+                updatePosition();
+              }
+            }
+          }}
+          onBlur={() => {
+            setTimeout(() => setIsOpen(false), 200);
           }}
           onKeyDown={handleKeyDown}
           autoComplete="off"
@@ -306,6 +320,10 @@ export function InwardMaterialCombobox({
             <button
               type="button"
               tabIndex={-1}
+              onMouseDown={e => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
               onClick={handleClear}
               style={{
                 background: 'transparent',
@@ -324,7 +342,7 @@ export function InwardMaterialCombobox({
         </div>
       </div>
 
-      {/* Floating Dropdown: ONLY shown when there are matching existing items */}
+      {/* Dropdown portaled to body with zoom compensation: never clipped by tables */}
       {isOpen && matchingItems.length > 0 && createPortal(
         <div
           ref={listRef}
@@ -335,85 +353,107 @@ export function InwardMaterialCombobox({
             bottom: coords.bottom,
             left: coords.left,
             width: coords.width,
-            maxHeight: coords.maxHeight || 280,
+            maxHeight: coords.maxHeight || 260,
             overflowY: 'auto',
             background: '#FFFFFF',
-            border: '1.5px solid rgba(15, 23, 42, 0.16)',
+            border: '1.5px solid rgba(15, 23, 42, 0.18)',
             borderRadius: 12,
-            boxShadow: '0 16px 38px -6px rgba(0, 31, 63, 0.25), 0 6px 16px rgba(0,0,0,0.08)',
+            boxShadow: '0 16px 38px -6px rgba(0, 31, 63, 0.28), 0 6px 16px rgba(0,0,0,0.1)',
             zIndex: 9999999
           }}
         >
-          {/* Header helper */}
+          {/* Header: Left=Product, Center=Stock, Right=Rate */}
           <div style={{
-            padding: '6px 12px',
+            padding: '7px 14px',
             background: '#F8FAFC',
-            borderBottom: '1px solid var(--line)',
+            borderBottom: '1px solid #E2E8F0',
             fontSize: 11,
-            color: 'var(--mut)',
+            fontWeight: 700,
+            color: '#64748B',
             display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center'
+            alignItems: 'center',
+            justifyContent: 'space-between'
           }}>
-            <span>📦 Existing Stock Materials (↑↓ to cycle · Enter ↵ to pick)</span>
-            <span style={{ fontWeight: 700 }}>{matchingItems.length} found</span>
+            <span style={{ flex: '1 1 auto' }}>📦 MATERIAL / பொருள்</span>
+            <span style={{ flex: '0 0 auto', textAlign: 'center', width: 120 }}>STOCK / இருப்பு</span>
+            <span style={{ flex: '0 0 auto', textAlign: 'right', width: 80 }}>RATE / விலை</span>
           </div>
 
           {/* Matching Existing Stock Items */}
           {matchingItems.map((item, idx) => {
             const isActive = activeIndex === idx;
+            const tamilText = item.nameTa || item.tamilName || inferTamilName(item.name) || '';
 
             return (
               <div
-                key={item.id}
+                key={item.id || idx}
                 ref={el => (itemRefs.current[idx] = el)}
                 className={`combobox-item ${isActive ? 'active' : ''}`}
                 style={{
-                  padding: '8px 12px',
+                  padding: '9px 14px',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  gap: 10,
+                  gap: 12,
                   borderBottom: '1px solid #F1F5F9',
                   background: isActive ? '#EFF6FF' : '#fff',
-                  borderLeft: isActive ? '3.5px solid var(--navy)' : '3.5px solid transparent',
-                  transition: 'all .12s ease'
+                  borderLeft: isActive ? '3.5px solid #2563EB' : '3.5px solid transparent',
+                  transition: 'background 0.1s ease'
                 }}
                 onMouseEnter={() => setActiveIndex(idx)}
                 onClick={() => handlePickItem(item)}
               >
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--ink)' }}>
+                {/* 1. Left: Product Name (English & Tamil) - NO SVS/HSN */}
+                <div style={{ flex: '1 1 auto', minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: 13, color: '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {highlightMatch(item.name, query)}
                   </div>
-                  {(item.nameTa || item.tamilName) && (
-                    <div style={{ fontSize: 11.5, color: '#B45309', fontWeight: 600, marginTop: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <span style={{ fontSize: 9.5, background: '#FEF3C7', padding: '1px 4px', borderRadius: 3 }}>தமிழ்</span>
-                      <span>{highlightMatch(item.nameTa || item.tamilName, query)}</span>
+                  {tamilText && (
+                    <div style={{
+                      fontSize: 11.5,
+                      color: '#B45309',
+                      fontWeight: 600,
+                      marginTop: 2,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      fontFamily: "'Mukta Malar', sans-serif"
+                    }}>
+                      <span style={{ fontSize: 9.5, background: '#FEF3C7', color: '#92400E', padding: '1px 4px', borderRadius: 3, fontWeight: 800 }}>தமிழ்</span>
+                      <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {highlightMatch(tamilText, query)}
+                      </span>
                     </div>
                   )}
-                  <div style={{ fontSize: 10.5, color: 'var(--mut)', marginTop: 2 }}>
-                    {item.id} · {item.cat} · HSN {item.hsn || '—'}
-                  </div>
                 </div>
 
-                <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                {/* 2. Center: Stock in Hand */}
+                <div style={{ flex: '0 0 auto', textAlign: 'center', width: 120 }}>
                   <span style={{
-                    fontSize: 11,
+                    display: 'inline-block',
+                    fontSize: 11.5,
                     fontWeight: 700,
                     background: (item.stock || 0) > 0 ? '#ECFDF5' : '#F1F5F9',
-                    color: (item.stock || 0) > 0 ? '#065F46' : 'var(--mut)',
-                    border: (item.stock || 0) > 0 ? '1px solid #A7F3D0' : '1px solid var(--line)',
-                    padding: '2px 7px',
+                    color: (item.stock || 0) > 0 ? '#065F46' : '#64748B',
+                    border: (item.stock || 0) > 0 ? '1px solid #A7F3D0' : '1px solid #E2E8F0',
+                    padding: '2px 8px',
                     borderRadius: 6,
                     whiteSpace: 'nowrap'
                   }}>
                     Stock: {fmt(item.stock || 0)} {item.uom || 'NOS'}
                   </span>
-                  {item.rate > 0 && (
-                    <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--navy)', marginTop: 2 }}>
+                </div>
+
+                {/* 3. Right: Amount / Rate */}
+                <div style={{ flex: '0 0 auto', textAlign: 'right', width: 80 }}>
+                  {item.rate > 0 ? (
+                    <div style={{ fontSize: 13, fontWeight: 800, color: '#1E3A8A' }}>
                       ₹{item.rate}
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 12, color: '#94A3B8', fontWeight: 600 }}>
+                      —
                     </div>
                   )}
                 </div>
@@ -439,6 +479,7 @@ export function InwardTamilMaterialInput({
   items = [],
   onSelectExisting,
   onChangeTamilName,
+  onClear,
   placeholder = "தமிழில் பொருள் பெயர்..."
 }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -449,7 +490,6 @@ export function InwardTamilMaterialInput({
   const inputRef = useRef(null);
   const listRef = useRef(null);
   const itemRefs = useRef([]);
-  const isComposingRef = useRef(false);
 
   // Sync external nameTa changes into query
   useEffect(() => {
@@ -460,33 +500,32 @@ export function InwardTamilMaterialInput({
 
   // Compute matching items based on Tamil query or English name
   const matchingItems = useMemo(() => {
-    const q = (query || '').trim().toLowerCase();
-    if (!q) return [];
-    return items.filter(it => {
-      const nTa = (it.nameTa || it.tamilName || '').toLowerCase();
-      const n = (it.name || '').toLowerCase();
-      const code = (it.id || '').toLowerCase();
-      return nTa.includes(q) || n.includes(q) || code.includes(q);
-    });
+    return filterInwardMatches(query, items);
   }, [query, items]);
 
   const updatePosition = () => {
     if (!inputRef.current) return;
     const rect = inputRef.current.getBoundingClientRect();
+    const z = getAppZoomFactor();
+
     const spaceBelow = window.innerHeight - rect.bottom;
     const spaceAbove = rect.top;
-    const openUpward = spaceBelow < 240 && spaceAbove > spaceBelow;
-    const availableSpace = openUpward ? spaceAbove - 16 : spaceBelow - 16;
-    const maxHeight = Math.max(160, Math.min(320, availableSpace));
-    const width = Math.max(rect.width, 380);
-    const left = Math.max(10, Math.min(rect.left, window.innerWidth - width - 16));
+    // Prefer opening downward directly under input; only open upward if space below is very small (< 140px)
+    const openUpward = spaceBelow < 140 && spaceAbove > spaceBelow;
+    const availableSpace = openUpward ? spaceAbove - 12 : spaceBelow - 12;
+    const maxHeight = Math.max(120, Math.min(260, availableSpace));
+    const width = Math.max(rect.width, 420);
+    let visualLeft = rect.left;
+    if (visualLeft + width > window.innerWidth - 12) {
+      visualLeft = Math.max(8, window.innerWidth - width - 12);
+    }
 
     setCoords({
-      top: openUpward ? 'auto' : rect.bottom + 4,
-      bottom: openUpward ? (window.innerHeight - rect.top + 4) : 'auto',
-      left,
-      width,
-      maxHeight,
+      top: openUpward ? 'auto' : (rect.bottom + 4) / z,
+      bottom: openUpward ? (window.innerHeight - rect.top + 4) / z : 'auto',
+      left: visualLeft / z,
+      width: width / z,
+      maxHeight: maxHeight / z,
       openUpward
     });
   };
@@ -529,43 +568,64 @@ export function InwardTamilMaterialInput({
   const processTamilInput = val => {
     setQuery(val);
     onChangeTamilName(val);
-    if (val.trim()) {
-      setIsOpen(true);
-      setActiveIndex(0);
+    const trimmed = val.trim();
+
+    // If already chosen from stock and text matches, do not show dropdown
+    if (row.id && trimmed.toLowerCase() === (row.nameTa || '').trim().toLowerCase()) {
+      setIsOpen(false);
+      return;
+    }
+
+    if (trimmed) {
+      const matches = filterInwardMatches(trimmed, items);
+      if (matches.length > 0) {
+        setIsOpen(true);
+        setActiveIndex(0);
+        updatePosition();
+      } else {
+        setIsOpen(false);
+      }
     } else {
       setIsOpen(false);
     }
   };
 
   const handleInputChange = e => {
-    if (isComposingRef.current || e.nativeEvent?.isComposing) {
-      return;
-    }
-    processTamilInput(e.target.value);
-  };
-
-  const handleCompositionEnd = e => {
-    isComposingRef.current = false;
     processTamilInput(e.target.value);
   };
 
   const handlePickItem = item => {
-    const pickTa = item.nameTa || item.tamilName || '';
+    const pickTa = item.nameTa || item.tamilName || inferTamilName(item.name) || '';
     setQuery(pickTa);
     setIsOpen(false);
     if (onSelectExisting) {
-      onSelectExisting(item);
+      onSelectExisting({
+        ...item,
+        nameTa: pickTa
+      });
+    }
+  };
+
+  const handleClear = (e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    setQuery('');
+    setIsOpen(false);
+    if (onClear) {
+      onClear();
+    } else {
+      onChangeTamilName('');
     }
   };
 
   const handleKeyDown = e => {
-    if (isComposingRef.current || e.nativeEvent?.isComposing || e.keyCode === 229 || e.key === 'Process') {
-      return;
-    }
     if (e.key === 'ArrowDown') {
       if (!isOpen && matchingItems.length > 0) {
         setIsOpen(true);
         setActiveIndex(0);
+        updatePosition();
         e.preventDefault();
         return;
       }
@@ -598,36 +658,42 @@ export function InwardTamilMaterialInput({
           fontSize: 12.5,
           fontFamily: "'Mukta Malar', 'Plus Jakarta Sans', system-ui, sans-serif",
           padding: '6px 8px',
-          paddingRight: query ? 24 : 8,
+          paddingRight: (query || row.nameTa) ? 26 : 8,
           borderColor: row.nameTa ? '#FCD34D' : 'var(--line)',
           background: row.nameTa ? '#FFFDF5' : '#fff'
         }}
         placeholder={placeholder}
         value={query}
-        onCompositionStart={() => {
-          isComposingRef.current = true;
-        }}
-        onCompositionUpdate={() => {
-          isComposingRef.current = true;
-        }}
-        onCompositionEnd={handleCompositionEnd}
         onChange={handleInputChange}
-        onBlur={e => {
-          isComposingRef.current = false;
-          processTamilInput(e.target.value);
+        onFocus={() => {
+          // If already chosen from stock, do not show dropdown
+          if (row.id && query.trim().toLowerCase() === (row.nameTa || '').trim().toLowerCase()) {
+            setIsOpen(false);
+            return;
+          }
+          if (query.trim()) {
+            const matches = filterInwardMatches(query.trim(), items);
+            if (matches.length > 0) {
+              setIsOpen(true);
+              updatePosition();
+            }
+          }
+        }}
+        onBlur={() => {
+          setTimeout(() => setIsOpen(false), 200);
         }}
         onKeyDown={handleKeyDown}
         autoComplete="off"
       />
-      {query && (
+      {(query || row.nameTa) && (
         <button
           type="button"
           tabIndex={-1}
-          onClick={() => {
-            setQuery('');
-            onChangeTamilName('');
-            setIsOpen(false);
+          onMouseDown={e => {
+            e.preventDefault();
+            e.stopPropagation();
           }}
+          onClick={handleClear}
           style={{
             position: 'absolute',
             right: 4,
@@ -639,12 +705,13 @@ export function InwardTamilMaterialInput({
             color: 'var(--mut)',
             padding: 2
           }}
-          title="Clear Tamil Name"
+          title="Clear / Remove material"
         >
           <Ic n="x" s={12} />
         </button>
       )}
 
+      {/* Portal to document.body: NEVER gets clipped or hidden by table scroll container */}
       {isOpen && matchingItems.length > 0 && createPortal(
         <div
           ref={listRef}
@@ -658,71 +725,102 @@ export function InwardTamilMaterialInput({
             maxHeight: coords.maxHeight || 260,
             overflowY: 'auto',
             background: '#FFFFFF',
-            border: '1.5px solid rgba(15, 23, 42, 0.16)',
+            border: '1.5px solid rgba(15, 23, 42, 0.18)',
             borderRadius: 12,
-            boxShadow: '0 16px 38px -6px rgba(0, 31, 63, 0.25)',
+            boxShadow: '0 16px 38px -6px rgba(0, 31, 63, 0.28), 0 6px 16px rgba(0,0,0,0.1)',
             zIndex: 9999999
           }}
         >
+          {/* Header: Left=Tamil Material, Center=Stock, Right=Rate */}
           <div style={{
-            padding: '6px 12px',
+            padding: '7px 14px',
             background: '#FFFBEB',
             borderBottom: '1px solid #FDE68A',
             fontSize: 11,
+            fontWeight: 700,
             color: '#92400E',
             display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center'
+            alignItems: 'center',
+            justifyContent: 'space-between'
           }}>
-            <span>🇮🇳 தமிழ் பொருட்கள் பரிந்துரை (Enter ↵ அழுத்தவும்)</span>
-            <span style={{ fontWeight: 700 }}>{matchingItems.length} பொருட்கள்</span>
+            <span style={{ flex: '1 1 auto' }}>🇮🇳 தமிழ் பொருள் பரிந்துரை</span>
+            <span style={{ flex: '0 0 auto', textAlign: 'center', width: 120 }}>இருப்பு (STOCK)</span>
+            <span style={{ flex: '0 0 auto', textAlign: 'right', width: 80 }}>விலை (RATE)</span>
           </div>
 
+          {/* Items: Left=Name, Center=Stock, Right=Rate (NO SVS/HSN) */}
           {matchingItems.map((item, idx) => {
             const isActive = activeIndex === idx;
-            const tamilText = item.nameTa || item.tamilName || '';
+            const tamilText = item.nameTa || item.tamilName || inferTamilName(item.name) || '';
 
             return (
               <div
-                key={item.id}
+                key={item.id || idx}
                 ref={el => (itemRefs.current[idx] = el)}
                 className={`combobox-item ${isActive ? 'active' : ''}`}
                 style={{
-                  padding: '8px 12px',
+                  padding: '9px 14px',
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
-                  gap: 10,
+                  gap: 12,
                   borderBottom: '1px solid #F1F5F9',
                   background: isActive ? '#FEF3C7' : '#fff',
-                  borderLeft: isActive ? '3.5px solid #D97706' : '3.5px solid transparent'
+                  borderLeft: isActive ? '3.5px solid #D97706' : '3.5px solid transparent',
+                  transition: 'background 0.1s ease'
                 }}
                 onMouseEnter={() => setActiveIndex(idx)}
                 onClick={() => handlePickItem(item)}
               >
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: 13, color: '#92400E', fontFamily: "'Mukta Malar', 'Plus Jakarta Sans', sans-serif" }}>
+                {/* 1. Left: Tamil name (highlighted) and English name below - NO SVS code, NO HSN */}
+                <div style={{ flex: '1 1 auto', minWidth: 0 }}>
+                  <div style={{
+                    fontWeight: 700,
+                    fontSize: 13,
+                    color: '#92400E',
+                    fontFamily: "'Mukta Malar', 'Plus Jakarta Sans', sans-serif",
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis'
+                  }}>
                     {highlightMatch(tamilText || item.name, query)}
                   </div>
-                  {tamilText && (
-                    <div style={{ fontSize: 11, color: 'var(--mut)', marginTop: 1 }}>
-                      EN: {item.name} · {item.id}
+                  {item.name && (
+                    <div style={{ fontSize: 11, color: '#64748B', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      EN: {item.name}
                     </div>
                   )}
                 </div>
 
-                <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                {/* 2. Center: Stock in Hand */}
+                <div style={{ flex: '0 0 auto', textAlign: 'center', width: 120 }}>
                   <span style={{
-                    fontSize: 10.5,
+                    display: 'inline-block',
+                    fontSize: 11.5,
                     fontWeight: 700,
                     background: (item.stock || 0) > 0 ? '#ECFDF5' : '#F1F5F9',
-                    color: (item.stock || 0) > 0 ? '#065F46' : 'var(--mut)',
-                    padding: '2px 6px',
-                    borderRadius: 4
+                    color: (item.stock || 0) > 0 ? '#065F46' : '#64748B',
+                    border: (item.stock || 0) > 0 ? '1px solid #A7F3D0' : '1px solid #E2E8F0',
+                    padding: '2px 8px',
+                    borderRadius: 6,
+                    whiteSpace: 'nowrap'
                   }}>
-                    {fmt(item.stock || 0)} {item.uom || 'NOS'}
+                    Stock: {fmt(item.stock || 0)} {item.uom || 'NOS'}
                   </span>
+                </div>
+
+                {/* 3. Right: Amount / Rate */}
+                <div style={{ flex: '0 0 auto', textAlign: 'right', width: 80 }}>
+                  {item.rate > 0 ? (
+                    <div style={{ fontSize: 13, fontWeight: 800, color: '#1E3A8A' }}>
+                      ₹{item.rate}
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 12, color: '#94A3B8', fontWeight: 600 }}>
+                      —
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -770,7 +868,6 @@ export function IssueMaterialCombobox({
   const inputRef = useRef(null);
   const listRef = useRef(null);
   const itemRefs = useRef([]);
-  const isComposingRef = useRef(false);
 
   // Sync external selectedId and language into query
   useEffect(() => {
@@ -786,9 +883,12 @@ export function IssueMaterialCombobox({
       return [];
     }
     const cleanQ = q.replace(/[^a-z0-9]/gi, '');
+    const inferredEn = inferEnglishName(q).toLowerCase();
     return items.filter(it => {
+      const explicitTa = (it.nameTa || it.tamilName || '').toLowerCase();
+      const inferredTa = inferTamilName(it.name || '').toLowerCase();
+      const nTa = `${explicitTa} ${inferredTa}`.trim();
       const n = (it.name || '').toLowerCase();
-      const nTa = (it.nameTa || it.tamilName || '').toLowerCase();
       const code = (it.id || '').toLowerCase();
       const hsn = String(it.hsn || '').toLowerCase();
       const cleanHsn = hsn.replace(/[^a-z0-9]/gi, '');
@@ -798,29 +898,35 @@ export function IssueMaterialCombobox({
         nTa.includes(q) ||
         code.includes(q) ||
         hsn.includes(q) ||
-        (cleanQ && cleanHsn && cleanHsn.includes(cleanQ))
+        (cleanQ && cleanHsn && cleanHsn.includes(cleanQ)) ||
+        (inferredEn && n.includes(inferredEn))
       );
     });
   }, [query, items]);
 
-  // Dynamically position dropdown with viewport boundary & collision detection
+  // Dynamically position dropdown with viewport boundary & collision detection and zoom factor compensation
   const updatePosition = () => {
     if (!inputRef.current) return;
     const rect = inputRef.current.getBoundingClientRect();
+    const z = getAppZoomFactor();
+
     const spaceBelow = window.innerHeight - rect.bottom;
     const spaceAbove = rect.top;
-    const openUpward = spaceBelow < 240 && spaceAbove > spaceBelow;
-    const availableSpace = openUpward ? spaceAbove - 16 : spaceBelow - 16;
-    const maxHeight = Math.max(160, Math.min(320, availableSpace));
-    const width = Math.max(rect.width, 420);
-    const left = Math.max(10, Math.min(rect.left, window.innerWidth - width - 16));
+    const openUpward = spaceBelow < 140 && spaceAbove > spaceBelow;
+    const availableSpace = openUpward ? spaceAbove - 12 : spaceBelow - 12;
+    const maxHeight = Math.max(120, Math.min(280, availableSpace));
+    const width = Math.max(rect.width, 460);
+    let visualLeft = rect.left;
+    if (visualLeft + width > window.innerWidth - 12) {
+      visualLeft = Math.max(8, window.innerWidth - width - 12);
+    }
 
     setCoords({
-      top: openUpward ? 'auto' : rect.bottom + 4,
-      bottom: openUpward ? (window.innerHeight - rect.top + 4) : 'auto',
-      left,
-      width,
-      maxHeight,
+      top: openUpward ? 'auto' : (rect.bottom + 4) / z,
+      bottom: openUpward ? (window.innerHeight - rect.top + 4) / z : 'auto',
+      left: visualLeft / z,
+      width: width / z,
+      maxHeight: maxHeight / z,
       openUpward
     });
   };
@@ -879,27 +985,22 @@ export function IssueMaterialCombobox({
       return;
     }
 
+    // If already chosen from stock and text matches, do not show dropdown
+    if (selectedId && trimmed.toLowerCase() === (itemDisplayName || '').trim().toLowerCase()) {
+      setIsOpen(false);
+      return;
+    }
+
     setIsOpen(true);
     setActiveIndex(0);
     updatePosition();
   };
 
   const handleInputChange = e => {
-    if (isComposingRef.current || e.nativeEvent?.isComposing) {
-      return;
-    }
-    processQueryInput(e.target.value);
-  };
-
-  const handleCompositionEnd = e => {
-    isComposingRef.current = false;
     processQueryInput(e.target.value);
   };
 
   const handleKeyDown = e => {
-    if (isComposingRef.current || e.nativeEvent?.isComposing || e.keyCode === 229 || e.key === 'Process') {
-      return;
-    }
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       if (!isOpen) {
@@ -992,7 +1093,6 @@ export function IssueMaterialCombobox({
     setQuery('');
     onSelect(null);
     setIsOpen(false);
-    if (inputRef.current) inputRef.current.focus();
   };
 
   return (
@@ -1014,17 +1114,20 @@ export function IssueMaterialCombobox({
           }}
           placeholder={placeholder}
           value={query}
-          onCompositionStart={() => {
-            isComposingRef.current = true;
-          }}
-          onCompositionUpdate={() => {
-            isComposingRef.current = true;
-          }}
-          onCompositionEnd={handleCompositionEnd}
           onChange={handleInputChange}
-          onBlur={e => {
-            isComposingRef.current = false;
-            processQueryInput(e.target.value);
+          onFocus={() => {
+            // If already chosen from stock, do not show dropdown
+            if (selectedId && query.trim().toLowerCase() === (itemDisplayName || '').trim().toLowerCase()) {
+              setIsOpen(false);
+              return;
+            }
+            if (query.trim().length > 0) {
+              setIsOpen(true);
+              updatePosition();
+            }
+          }}
+          onBlur={() => {
+            setTimeout(() => setIsOpen(false), 200);
           }}
           onKeyDown={handleKeyDown}
           autoComplete="off"
@@ -1062,7 +1165,7 @@ export function IssueMaterialCombobox({
         </div>
       </div>
 
-      {/* Floating Dropdown directly below the input box */}
+      {/* Floating Dropdown directly below or above the input box via portal */}
       {isOpen && query.trim().length > 0 && createPortal(
         <div
           ref={listRef}
@@ -1076,9 +1179,9 @@ export function IssueMaterialCombobox({
             maxHeight: coords.maxHeight || 280,
             overflowY: 'auto',
             background: '#FFFFFF',
-            border: '1.5px solid rgba(15, 23, 42, 0.16)',
+            border: '1.5px solid rgba(15, 23, 42, 0.18)',
             borderRadius: 12,
-            boxShadow: '0 16px 38px -6px rgba(0, 31, 63, 0.25), 0 6px 16px rgba(0,0,0,0.08)',
+            boxShadow: '0 16px 38px -6px rgba(0, 31, 63, 0.28), 0 6px 16px rgba(0,0,0,0.1)',
             zIndex: 9999999
           }}
         >
@@ -1113,15 +1216,6 @@ export function IssueMaterialCombobox({
           ) : (
             matchingItems.map((item, idx) => {
               const isActive = activeIndex === idx;
-              const q = (query || '').trim().toLowerCase();
-              const cleanQ = q.replace(/[^a-z0-9]/gi, '');
-              const itemHsn = String(item.hsn || '').toLowerCase();
-              const isHsnMatch = Boolean(
-                q &&
-                item.hsn &&
-                (itemHsn.includes(q) || (cleanQ && itemHsn.replace(/[^a-z0-9]/gi, '').includes(cleanQ)))
-              );
-
               const isOutOfStock = Number(item.stock || 0) <= 0;
 
               return (
@@ -1145,38 +1239,19 @@ export function IssueMaterialCombobox({
                   onMouseEnter={() => setActiveIndex(idx)}
                   onClick={() => handlePick(item)}
                 >
-                  {/* Column 1: Localized Product Name & matched HSN */}
+                  {/* Column 1: Product Name & Tamil Name (NO SVS/HSN) */}
                   <div style={{ minWidth: 0 }}>
                     <div style={{ fontWeight: 700, fontSize: 13.5, color: isOutOfStock ? '#991B1B' : 'var(--ink)' }}>
                       {highlightMatch(lang === 'ta' ? (item.nameTa || item.tamilName || inferTamilName(item.name) || item.name) : item.name, query)}
                     </div>
                     {lang === 'ta' && (item.nameTa || item.tamilName || inferTamilName(item.name)) && (
                       <div style={{ fontSize: 11, color: 'var(--mut)', marginTop: 1 }}>
-                        EN: {item.name} · {item.id}
+                        EN: {item.name}
                       </div>
                     )}
                     {lang !== 'ta' && (item.nameTa || item.tamilName || inferTamilName(item.name)) && (
                       <div style={{ fontSize: 11, color: '#B45309', marginTop: 1 }}>
                         தமிழ்: {item.nameTa || item.tamilName || inferTamilName(item.name)}
-                      </div>
-                    )}
-                    {isHsnMatch && (
-                      <div style={{ marginTop: 2, display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <span style={{
-                          fontSize: 10.5,
-                          fontWeight: 800,
-                          background: '#FEF9C3',
-                          color: '#854D0E',
-                          border: '1px solid #FDE047',
-                          padding: '1px 6px',
-                          borderRadius: 4,
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 3
-                        }}>
-                          <span>HSN</span>
-                          {highlightMatch(String(item.hsn), query)}
-                        </span>
                       </div>
                     )}
                   </div>
