@@ -560,9 +560,25 @@ export function amountInWords(num, lang = 'en') {
 }
 
 /**
+ * Return local YYYY-MM-DD string according to local computer timezone (e.g. IST)
+ */
+export function getLocalTodayYmd(d = new Date()) {
+  try {
+    const dateObj = typeof d === 'string' ? new Date(d) : d;
+    if (!isNaN(dateObj.getTime())) {
+      const y = dateObj.getFullYear();
+      const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const day = String(dateObj.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    }
+  } catch (e) {}
+  return new Date().toLocaleDateString('en-CA'); // en-CA gives YYYY-MM-DD in local time
+}
+
+/**
  * Export structured data array to Microsoft Excel CSV file with UTF-8 BOM
  */
-export function exportToExcel(filename, rows) {
+export async function exportToExcel(filename, rows) {
   if (!rows || !rows.length) return false;
   const headers = Object.keys(rows[0]);
   const csvLines = [
@@ -574,14 +590,37 @@ export function exportToExcel(filename, rows) {
       }).join(',')
     )
   ];
-  const blob = new Blob(['\uFEFF' + csvLines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename.endsWith('.csv') ? filename : `${filename}.csv`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-  return true;
+  const csvContent = '\uFEFF' + csvLines.join('\r\n');
+  const safeFilename = filename.endsWith('.csv') ? filename : `${filename}.csv`;
+
+  // 1. If running inside Electron desktop app, use native file save dialog
+  if (window.electronAPI && typeof window.electronAPI.saveFile === 'function') {
+    try {
+      const res = await window.electronAPI.saveFile({
+        filename: safeFilename,
+        content: csvContent
+      });
+      return res && (res.success || res.filePath);
+    } catch (e) {
+      // Fall through to browser download fallback
+    }
+  }
+
+  // 2. Web browser download fallback with delayed revoke
+  try {
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = safeFilename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => {
+      try { URL.revokeObjectURL(url); } catch (e) {}
+    }, 60000);
+    return true;
+  } catch (err) {
+    return false;
+  }
 }

@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   openImagesFolder: () => ipcRenderer.invoke('open-images-folder'),
   saveSingleImage: (payload) => ipcRenderer.invoke('save-single-image', payload),
   syncAllImages: (invoices) => ipcRenderer.invoke('sync-all-images', invoices),
+  saveFile: (payload) => ipcRenderer.invoke('save-file', payload),
   checkGitHubRelease: () => ipcRenderer.invoke('check-github-release'),
   downloadUpdate: (url) => ipcRenderer.invoke('download-update', url),
   launchInstallerAndQuit: () => ipcRenderer.invoke('launch-installer-and-quit'),

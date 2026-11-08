@@ -156,6 +156,26 @@ export default function CustomerAutofillInput({
   }, [isOpen]);
 
   const handleInputChange = e => {
+    // Prevent state updates mid-IME composition (e.g. Windows Tamil Phonetic layout).
+    // Updating React state while IME is active forces a DOM reconciliation that aborts
+    // the IME buffer, causing characters to duplicate (e.g. V -> Vv, D -> Dd, N -> Nn).
+    if (isComposingRef.current || e.nativeEvent?.isComposing) {
+      return;
+    }
+    const val = e.target.value;
+    onChange(val);
+
+    if (val.trim().length > 0) {
+      setIsOpen(true);
+      setActiveIndex(0);
+      updatePosition();
+    } else {
+      setIsOpen(false);
+    }
+  };
+
+  const handleCompositionEnd = e => {
+    isComposingRef.current = false;
     const val = e.target.value;
     onChange(val);
 
@@ -177,6 +197,9 @@ export default function CustomerAutofillInput({
   };
 
   const handleKeyDown = e => {
+    if (isComposingRef.current || e.nativeEvent?.isComposing || e.keyCode === 229 || e.key === 'Process') {
+      return;
+    }
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       if (!isOpen) {
@@ -249,10 +272,10 @@ export default function CustomerAutofillInput({
           onCompositionStart={() => {
             isComposingRef.current = true;
           }}
-          onCompositionEnd={e => {
-            isComposingRef.current = false;
-            handleInputChange(e);
+          onCompositionUpdate={() => {
+            isComposingRef.current = true;
           }}
+          onCompositionEnd={handleCompositionEnd}
           onChange={handleInputChange}
           onFocus={() => {
             if ((value || '').trim().length > 0 && matchingCustomers.length > 0) {
@@ -260,12 +283,18 @@ export default function CustomerAutofillInput({
               updatePosition();
             }
           }}
-          onBlur={() => {
-            if (field === 'cust' && value) {
-              const formatted = formatCustomerName(value);
-              if (formatted !== value) {
+          onBlur={e => {
+            isComposingRef.current = false;
+            const currentVal = e.target.value;
+            if (field === 'cust' && currentVal) {
+              const formatted = formatCustomerName(currentVal);
+              if (formatted !== currentVal) {
                 onChange(formatted);
+              } else if (currentVal !== value) {
+                onChange(currentVal);
               }
+            } else if (currentVal !== value) {
+              onChange(currentVal);
             }
           }}
           onKeyDown={handleKeyDown}

@@ -1,7 +1,7 @@
-import { useState, useMemo, useEffect, Fragment } from 'react';
+import { useState, useMemo, useEffect, useRef, Fragment } from 'react';
 import LOGO from '../assets/logo.png';
 import OWNER_SIGN from '../assets/Owner Signature.jpeg';
-import { fmt, inr, dt, amountInWords, DEFAULT_UOMS_LIST, formatCustomerName, getMaterialDisplayName, inferTamilName } from '../utils';
+import { fmt, inr, dt, amountInWords, DEFAULT_UOMS_LIST, formatCustomerName, getMaterialDisplayName, inferTamilName, getLocalTodayYmd } from '../utils';
 import Ic from '../components/Icon';
 import { IssueMaterialCombobox } from '../components/MaterialCombobox';
 import CustomerAutofillInput from '../components/CustomerCombobox';
@@ -105,13 +105,13 @@ export default function IssueBill({ items, bills, setBills, setItems, preset, to
   const [issueDate, setIssueDate] = useState(() => {
     if (editingBill && editingBill.date) {
       try {
-        return new Date(editingBill.date).toISOString().slice(0, 10);
+        return getLocalTodayYmd(editingBill.date);
       } catch (e) { }
     }
     if (initialDraft?.issueDate) {
       return initialDraft.issueDate;
     }
-    return new Date().toISOString().slice(0, 10);
+    return getLocalTodayYmd();
   });
 
   const availableUoms = useMemo(() => (uoms && uoms.length ? uoms : DEFAULT_UOMS_LIST), [uoms]);
@@ -212,6 +212,10 @@ export default function IssueBill({ items, bills, setBills, setItems, preset, to
     } catch (e) {}
     return [];
   });
+
+  const isVehicleComposing = useRef(false);
+  const isAddressComposing = useRef(false);
+  const isSearchComposing = useRef(false);
 
   // Global Ctrl + K search shortcut listener
   useEffect(() => {
@@ -672,6 +676,7 @@ export default function IssueBill({ items, bills, setBills, setItems, preset, to
     const b = {
       ...h,
       cust: formatCustomerName(h.cust.trim()),
+      veh: (h.veh || '').trim().toUpperCase(),
       ...k,
       enableGst,
       cgst: k.cgst,
@@ -679,6 +684,7 @@ export default function IssueBill({ items, bills, setBills, setItems, preset, to
       taxBreakdown: k.taxBreakdown,
       no: currentNo,
       date: issueDateTime,
+      createdAt: editingBill?.createdAt || now.toISOString(),
       time: new Date(issueDateTime).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
       by: user || 'Store Incharge',
       totalWeight: k.totalWeight
@@ -891,6 +897,7 @@ export default function IssueBill({ items, bills, setBills, setItems, preset, to
     const previewBill = {
       ...h,
       cust: formatCustomerName(h.cust.trim()),
+      veh: (h.veh || '').trim().toUpperCase(),
       ...c,
       enableGst,
       no: currentNo,
@@ -919,7 +926,27 @@ export default function IssueBill({ items, bills, setBills, setItems, preset, to
               type="text"
               placeholder="Search customers, materials, bills..."
               value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
+              onCompositionStart={() => {
+                isSearchComposing.current = true;
+              }}
+              onCompositionUpdate={() => {
+                isSearchComposing.current = true;
+              }}
+              onCompositionEnd={e => {
+                isSearchComposing.current = false;
+                setSearchQuery(e.target.value);
+              }}
+              onChange={e => {
+                if (isSearchComposing.current || e.nativeEvent?.isComposing) return;
+                setSearchQuery(e.target.value);
+              }}
+              onBlur={e => {
+                isSearchComposing.current = false;
+                setSearchQuery(e.target.value);
+              }}
+              onKeyDown={e => {
+                if (isSearchComposing.current || e.nativeEvent?.isComposing || e.keyCode === 229 || e.key === 'Process') return;
+              }}
             />
             <span className="kbd-shortcut">Ctrl + K</span>
           </div>
@@ -1195,9 +1222,35 @@ export default function IssueBill({ items, bills, setBills, setItems, preset, to
                   className="in with-prefix"
                   placeholder={t('toAddressPlaceholder')}
                   value={h.address || ''}
-                  onChange={e => {
+                  onCompositionStart={() => {
+                    isAddressComposing.current = true;
+                  }}
+                  onCompositionUpdate={() => {
+                    isAddressComposing.current = true;
+                  }}
+                  onCompositionEnd={e => {
+                    isAddressComposing.current = false;
                     setView(null);
-                    setH({ ...h, address: e.target.value });
+                    setH(prev => ({ ...prev, address: e.target.value }));
+                  }}
+                  onChange={e => {
+                    if (isAddressComposing.current || e.nativeEvent?.isComposing) {
+                      return;
+                    }
+                    setView(null);
+                    setH(prev => ({ ...prev, address: e.target.value }));
+                  }}
+                  onBlur={e => {
+                    isAddressComposing.current = false;
+                    const val = e.target.value || '';
+                    if (val !== (h.address || '')) {
+                      setH(prev => ({ ...prev, address: val }));
+                    }
+                  }}
+                  onKeyDown={e => {
+                    if (isAddressComposing.current || e.nativeEvent?.isComposing || e.keyCode === 229 || e.key === 'Process') {
+                      return;
+                    }
                   }}
                   style={{ height: 38, fontSize: 13, fontWeight: 500, width: '100%', boxSizing: 'border-box', paddingRight: h.address ? 28 : 12 }}
                 />
@@ -1242,9 +1295,33 @@ export default function IssueBill({ items, bills, setBills, setItems, preset, to
                   placeholder={t('vehiclePlaceholder')}
                   style={{ textTransform: 'uppercase', fontWeight: 700, height: 38, fontSize: 13, width: '100%', boxSizing: 'border-box', paddingRight: h.veh ? 28 : 12 }}
                   value={h.veh || ''}
-                  onChange={e => {
+                  onCompositionStart={() => {
+                    isVehicleComposing.current = true;
+                  }}
+                  onCompositionUpdate={() => {
+                    isVehicleComposing.current = true;
+                  }}
+                  onCompositionEnd={e => {
+                    isVehicleComposing.current = false;
                     setView(null);
-                    setH({ ...h, veh: e.target.value.toUpperCase() });
+                    setH(prev => ({ ...prev, veh: e.target.value }));
+                  }}
+                  onChange={e => {
+                    if (isVehicleComposing.current || e.nativeEvent?.isComposing) {
+                      return;
+                    }
+                    setView(null);
+                    setH(prev => ({ ...prev, veh: e.target.value }));
+                  }}
+                  onBlur={e => {
+                    isVehicleComposing.current = false;
+                    const val = (e.target.value || '').trim().toUpperCase();
+                    setH(prev => ({ ...prev, veh: val }));
+                  }}
+                  onKeyDown={e => {
+                    if (isVehicleComposing.current || e.nativeEvent?.isComposing || e.keyCode === 229 || e.key === 'Process') {
+                      return;
+                    }
                   }}
                 />
                 {h.veh && (
@@ -1547,6 +1624,9 @@ export default function IssueBill({ items, bills, setBills, setItems, preset, to
                 value={activeLine.weight}
                 style={{ width: '100%', height: 38, fontSize: 13, fontWeight: 600, boxSizing: 'border-box' }}
                 onKeyDown={e => {
+                  if (e.isComposing || e.nativeEvent?.isComposing || e.keyCode === 229 || e.key === 'Process') {
+                    return;
+                  }
                   // Allow navigation, editing, shortcuts (Ctrl+A, Ctrl+C, Ctrl+V, etc.)
                   if (
                     ['Backspace', 'Delete', 'Tab', 'Escape', 'Enter', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key) ||

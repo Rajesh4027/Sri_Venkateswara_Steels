@@ -1,4 +1,4 @@
-# Sri Venkateswara Steels – ERP & Desktop Software v2.8.1
+# Sri Venkateswara Steels – ERP & Desktop Software v2.8.2
 
 Official ERP, Inventory Management, Billing & Inward Register application for Sri Venkateswara Steels, Theni.
 
@@ -26,4 +26,9 @@ npm run dist            # Package Windows installer (.exe) & portable desktop ex
 ```
 
 ## Version
-**v2.8.0** — Official Production Release: Flexible Issue Bill UI with 3-Card Financial Summary, Live Material HSN & Stock Indicator, Dynamic Tamil/English Localization, and Non-Alpha Intercepted Weight Input.
+**v2.8.2** — Production Release:
+- **IME Double Character Fix**: Eliminated duplicate typing with Windows Tamil Phonetic keyboard across Customer Name, Vehicle Number, Address, and Material inputs.
+- **Update Item Cancel Button**: Added dedicated ✕ Cancel button in quick-add grid beside "Update Item" to discard changes cleanly.
+- **Clear Prefilled Customer Data**: Added single-click reset to wipe prefilled phone, customer name, address, and vehicle at once.
+- **Desktop Software File Exports**: Unblocked Electron file downloads and integrated native Windows Save As dialogs for Backups, Stock CSVs, and Excel reports.
+- **Delivery History Date Filtering**: Fixed timezone mismatch to ensure deliveries generated today display seamlessly under the "Today" filter.

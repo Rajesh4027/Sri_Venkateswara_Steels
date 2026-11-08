@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { fmt, inr, dt, exportToExcel, getMaterialDisplayName } from '../utils';
+import { fmt, inr, dt, exportToExcel, getMaterialDisplayName, getLocalTodayYmd } from '../utils';
 import Ic from '../components/Icon';
 import BillLightbox from '../components/BillLightbox';
 import Modal from '../components/Modal';
@@ -287,7 +287,7 @@ export default function InwardRegister({
   };
 
   // Export Suppliers & Inward Register to Microsoft Excel (.csv)
-  const handleExportSuppliersExcel = () => {
+  const handleExportSuppliersExcel = async () => {
     if (!filteredInvoices.length) {
       toast('No supplier invoices available to export');
       return;
@@ -311,7 +311,7 @@ export default function InwardRegister({
         'Photo Proof': inv.billImage ? 'Yes' : 'No'
       });
     });
-    const success = exportToExcel(`SVS_Suppliers_Inward_Invoices_${new Date().toISOString().slice(0, 10)}`, exportRows);
+    const success = await exportToExcel(`SVS_Suppliers_Inward_Invoices_${getLocalTodayYmd()}`, exportRows);
     if (success) toast('Suppliers procurement register exported to Excel successfully!');
   };
 

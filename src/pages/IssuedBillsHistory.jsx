@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import Ic from '../components/Icon';
 import LOGO from '../assets/logo.png';
 import OWNER_SIGN from '../assets/Owner Signature.jpeg';
-import { inr, fmt, dt, amountInWords, exportToExcel, formatCustomerName, getMaterialDisplayName } from '../utils';
+import { inr, fmt, dt, amountInWords, exportToExcel, formatCustomerName, getMaterialDisplayName, getLocalTodayYmd } from '../utils';
 import { useLanguage } from '../context/LanguageContext';
 
 /**
@@ -212,7 +212,7 @@ export default function IssuedBillsHistory({
 }) {
   const [search, setSearch] = useState('');
   const [filterPay, setFilterPay] = useState('all');
-  const [filterDate, setFilterDate] = useState('today'); // Default: show Today's bills
+  const [filterDate, setFilterDate] = useState('all'); // Default: show All delivery bills (newest first)
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
 
@@ -225,63 +225,80 @@ export default function IssuedBillsHistory({
   const { t, lang } = useLanguage();
 
   // ── Date Filtering Helper ──
-  const isDateMatch = (dateStr, filter) => {
+  const isDateMatch = (b, filter) => {
     if (filter === 'all') return true;
+    if (!b) return false;
+
+    const billObj = typeof b === 'object' && b !== null ? b : { date: b };
+    const dateStr = billObj.date || billObj.createdAt || '';
     if (!dateStr) return false;
 
-    // Normalize dateStr to local YYYY-MM-DD
-    let ymd = '';
-    try {
-      const d = new Date(dateStr);
-      if (!isNaN(d.getTime())) {
-        const y = d.getFullYear();
-        const m = String(d.getMonth() + 1).padStart(2, '0');
-        const day = String(d.getDate()).padStart(2, '0');
-        ymd = `${y}-${m}-${day}`;
-      } else {
-        ymd = String(dateStr).slice(0, 10);
-      }
-    } catch (e) {
-      ymd = String(dateStr).slice(0, 10);
-    }
+    // Helper to extract local YYYY-MM-DD
+    const toLocalYmd = val => {
+      if (!val) return '';
+      try {
+        const d = new Date(val);
+        if (!isNaN(d.getTime())) {
+          const y = d.getFullYear();
+          const m = String(d.getMonth() + 1).padStart(2, '0');
+          const day = String(d.getDate()).padStart(2, '0');
+          return `${y}-${m}-${day}`;
+        }
+      } catch (e) {}
+      return String(val).slice(0, 10);
+    };
 
     const now = new Date();
-    const nowY = now.getFullYear();
-    const nowM = String(now.getMonth() + 1).padStart(2, '0');
-    const nowDay = String(now.getDate()).padStart(2, '0');
-    const todayStr = `${nowY}-${nowM}-${nowDay}`;
+    const todayStr = getLocalTodayYmd(now);
 
     const yest = new Date(now.getTime() - 86400000);
-    const yestY = yest.getFullYear();
-    const yestM = String(yest.getMonth() + 1).padStart(2, '0');
-    const yestDay = String(yest.getDate()).padStart(2, '0');
-    const yesterdayStr = `${yestY}-${yestM}-${yestDay}`;
+    const yesterdayStr = getLocalTodayYmd(yest);
+
+    const billYmd = toLocalYmd(billObj.date);
+    const createdYmd = toLocalYmd(billObj.createdAt);
 
     if (filter === 'today') {
-      return ymd === todayStr;
+      // 1. Exact match on local today date (either invoice date or creation date)
+      if (billYmd === todayStr || createdYmd === todayStr) return true;
+
+      // 2. Real-time fallback: match if generated within the last 24 hours
+      try {
+        const itemTimestamp = new Date(billObj.createdAt || billObj.date).getTime();
+        if (!isNaN(itemTimestamp)) {
+          const diffHours = (now.getTime() - itemTimestamp) / (1000 * 60 * 60);
+          if (diffHours >= 0 && diffHours <= 24) return true;
+        }
+      } catch (e) {}
+      return false;
     }
+
     if (filter === 'yesterday') {
-      return ymd === yesterdayStr;
+      return billYmd === yesterdayStr || createdYmd === yesterdayStr;
     }
+
     if (filter === 'week') {
-      const d = new Date(dateStr);
+      const d = new Date(billObj.date || billObj.createdAt);
       const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       const itemDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
       const diffDays = Math.floor((today - itemDate) / (1000 * 60 * 60 * 24));
       return diffDays >= 0 && diffDays <= 7;
     }
+
     if (filter === 'month') {
-      const d = new Date(dateStr);
+      const d = new Date(billObj.date || billObj.createdAt);
       const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       const itemDate = new Date(d.getFullYear(), d.getMonth(), d.getDate());
       const diffDays = Math.floor((today - itemDate) / (1000 * 60 * 60 * 24));
       return diffDays >= 0 && diffDays <= 30;
     }
+
     if (filter === 'custom') {
-      if (fromDate && ymd < fromDate) return false;
-      if (toDate && ymd > toDate) return false;
+      const targetYmd = billYmd || createdYmd;
+      if (fromDate && targetYmd < fromDate) return false;
+      if (toDate && targetYmd > toDate) return false;
       return true;
     }
+
     return true;
   };
 
@@ -317,7 +334,7 @@ export default function IssuedBillsHistory({
       }
 
       // 3. Date Filter
-      if (!isDateMatch(b.date, filterDate)) return false;
+      if (!isDateMatch(b, filterDate)) return false;
 
       return true;
     }).sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
@@ -352,8 +369,9 @@ export default function IssuedBillsHistory({
   }, [bills]);
 
   // ── Export CSV Ledger ──
-  const handleExportCsv = () => {
-    if (!bills.length) {
+  const handleExportCsv = async () => {
+    const listToExport = filteredBills.length ? filteredBills : bills;
+    if (!listToExport.length) {
       toast('No issued bills available to export');
       return;
     }
@@ -381,7 +399,7 @@ export default function IssuedBillsHistory({
     ];
 
     const rows = [];
-    filteredBills.forEach(b => {
+    listToExport.forEach(b => {
       const billRows = b.rows && b.rows.length ? b.rows : [{ name: '-', hsn: '-', qty: 0, weight: '', uom: '-', rate: 0, gst: 0, amt: 0 }];
       billRows.forEach(r => {
         rows.push([
@@ -408,26 +426,46 @@ export default function IssuedBillsHistory({
       });
     });
 
-    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const safeFilename = `SVS_Issued_Bills_Ledger_${getLocalTodayYmd()}.csv`;
+
+    if (window.electronAPI && typeof window.electronAPI.saveFile === 'function') {
+      try {
+        const res = await window.electronAPI.saveFile({
+          filename: safeFilename,
+          content: csvContent
+        });
+        if (res && (res.success || res.filePath)) {
+          toast('Issued bills ledger exported to CSV successfully!');
+        }
+        return;
+      } catch (e) {}
+    }
+
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `SVS_Issued_Bills_Ledger_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = safeFilename;
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    setTimeout(() => {
+      try { URL.revokeObjectURL(url); } catch (e) {}
+    }, 60000);
     toast('Issued bills ledger exported to CSV successfully!');
   };
 
   // ── Export Delivery History to Microsoft Excel (.csv with UTF-8 BOM) ──
-  const handleExportDeliveryExcel = () => {
-    if (!filteredBills.length) {
+  const handleExportDeliveryExcel = async () => {
+    const listToExport = filteredBills.length ? filteredBills : bills;
+    if (!listToExport.length) {
       toast('No issued delivery vouchers available to export');
       return;
     }
 
     const exportRows = [];
-    filteredBills.forEach((b, idx) => {
+    listToExport.forEach((b, idx) => {
       const itemsSummary = (b.rows || [])
         .map(r => `${r.name} (${r.weight ? fmt(r.weight) + ' ' + (r.weightUnit || 'KG') : fmt(r.qty) + ' ' + (r.uom || '')} @ ₹${fmt(r.rate)})`)
         .join('; ');
@@ -451,7 +489,7 @@ export default function IssuedBillsHistory({
       });
     });
 
-    const success = exportToExcel(`SVS_Delivery_Vouchers_${new Date().toISOString().slice(0, 10)}`, exportRows);
+    const success = await exportToExcel(`SVS_Delivery_Vouchers_${getLocalTodayYmd()}`, exportRows);
     if (success) toast('Delivery vouchers history exported to Excel successfully!');
   };
 

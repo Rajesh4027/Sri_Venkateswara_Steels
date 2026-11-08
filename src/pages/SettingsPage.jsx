@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect } from 'react';
 import Ic from '../components/Icon';
 import LOGO from '../assets/logo.png';
-import { inr, fmt, KEY } from '../utils';
+import { inr, fmt, KEY, getLocalTodayYmd } from '../utils';
 import { useLanguage } from '../context/LanguageContext';
 
-const CURRENT_APP_VERSION = 'v2.8.1';
+const CURRENT_APP_VERSION = 'v2.8.2';
 const GITHUB_REPO = 'Rajesh4027/Sri_Venkateswara_Steels';
 
 function parseSemVer(v) {
@@ -133,10 +133,10 @@ export default function SettingsPage({
   };
 
   // ── JSON Full ERP Backup Export ──
-  const handleExportJsonBackup = () => {
+  const handleExportJsonBackup = async () => {
     const backupData = {
       app: 'Sri Venkateswara Steels ERP',
-      version: form.appVersion || 'v2.4.0',
+      version: form.appVersion || 'v2.8.2',
       exportedAt: new Date().toISOString(),
       summary: {
         totalStockItems: items.length,
@@ -162,7 +162,7 @@ export default function SettingsPage({
         rateWithGst: i.rateWithGst ?? i.rate ?? 0,
         gst: i.gst ?? 18,
         status: i.status || 'ok',
-        last: i.last || new Date().toISOString().slice(0, 10)
+        last: i.last || getLocalTodayYmd()
       })),
       // 2. All Issue Bills & Delivery History Data (issue data)
       bills: bills.map(b => ({
@@ -182,17 +182,39 @@ export default function SettingsPage({
       users
     };
 
-    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+    const jsonStr = JSON.stringify(backupData, null, 2);
+    const dateStr = getLocalTodayYmd();
+    const safeFilename = `SVS_ERP_Complete_Backup_${dateStr}.json`;
+    const imgCount = inwardInvoices.filter(i => !!i.billImage).length;
+
+    // 1. Native Electron Save Dialog (if available)
+    if (window.electronAPI && typeof window.electronAPI.saveFile === 'function') {
+      try {
+        const res = await window.electronAPI.saveFile({
+          filename: safeFilename,
+          content: jsonStr
+        });
+        if (res && (res.success || res.filePath)) {
+          toast(`✓ Complete ERP Backup exported! (${items.length} stocks, ${bills.length} issue bills, ${inwardInvoices.length} invoices with ${imgCount} bill photos)`);
+        }
+        return;
+      } catch (e) {
+        // Fallback to web download below
+      }
+    }
+
+    // 2. Web browser download fallback
+    const blob = new Blob([jsonStr], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    const dateStr = new Date().toISOString().slice(0, 10);
-    a.download = `SVS_ERP_Complete_Backup_${dateStr}.json`;
+    a.download = safeFilename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    const imgCount = inwardInvoices.filter(i => !!i.billImage).length;
+    setTimeout(() => {
+      try { URL.revokeObjectURL(url); } catch (e) {}
+    }, 60000);
     toast(`✓ Complete ERP Backup exported! (${items.length} stocks, ${bills.length} issue bills, ${inwardInvoices.length} invoices with ${imgCount} bill photos)`);
   };
 
@@ -303,7 +325,7 @@ export default function SettingsPage({
   };
 
   // ── Stock CSV Export ──
-  const handleExportStockCsv = () => {
+  const handleExportStockCsv = async () => {
     if (!items.length) {
       toast('No items in inventory to export');
       return;
@@ -319,14 +341,35 @@ export default function SettingsPage({
       i.min ?? 0,
       i.rate ?? 0
     ]);
-    const csvContent = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const safeFilename = `SVS_Stock_Inventory_${getLocalTodayYmd()}.csv`;
+
+    if (window.electronAPI && typeof window.electronAPI.saveFile === 'function') {
+      try {
+        const res = await window.electronAPI.saveFile({
+          filename: safeFilename,
+          content: csvContent
+        });
+        if (res && (res.success || res.filePath)) {
+          toast('Stock inventory CSV exported!');
+        }
+        return;
+      } catch (e) {
+        // Fallback to web download below
+      }
+    }
+
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `SVS_Stock_Inventory_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = safeFilename;
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+    setTimeout(() => {
+      try { URL.revokeObjectURL(url); } catch (e) {}
+    }, 60000);
     toast('Stock inventory CSV exported!');
   };
 

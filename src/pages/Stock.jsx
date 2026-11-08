@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { fmt, inr, exportToExcel, getMaterialDisplayName, inferTamilName } from '../utils';
+import { fmt, inr, exportToExcel, getMaterialDisplayName, inferTamilName, getLocalTodayYmd } from '../utils';
 import Ic from '../components/Icon';
 import Pill from '../components/Pill';
 import Modal from '../components/Modal';
@@ -255,7 +255,7 @@ export default function Stock({
   };
 
   // Export Current Filtered Stock to Microsoft Excel (.csv)
-  const handleExportStockExcel = () => {
+  const handleExportStockExcel = async () => {
     if (!rows.length) {
       toast('No stock inventory data to export');
       return;
@@ -284,7 +284,7 @@ export default function Stock({
         'Stock Valuation (₹)': totalVal
       };
     });
-    const success = exportToExcel(`SVS_Stock_Inventory_${new Date().toISOString().slice(0, 10)}`, exportData);
+    const success = await exportToExcel(`SVS_Stock_Inventory_${getLocalTodayYmd()}`, exportData);
     if (success) toast('Stock inventory exported to Excel successfully!');
   };
 

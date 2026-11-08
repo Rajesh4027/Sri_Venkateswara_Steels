@@ -23,7 +23,7 @@ function isNewerVersion(remote, local) {
   return false;
 }
 
-const CURRENT_APP_VERSION = 'v2.8.1';
+const CURRENT_APP_VERSION = 'v2.8.2';
 const GITHUB_REPO = 'Rajesh4027/Sri_Venkateswara_Steels';
 const GITHUB_RELEASES_API = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
 
@@ -89,6 +89,7 @@ export default function SoftwareVersionAlert({ settings = {}, toast, style = {},
   // Periodic GitHub releases API check engine (every 10 seconds)
   useEffect(() => {
     let isMounted = true;
+    let isRateLimited = false;
 
     const runCheck = async () => {
       try {
@@ -96,26 +97,32 @@ export default function SoftwareVersionAlert({ settings = {}, toast, style = {},
         let releaseData = null;
 
         // 1. Try via Electron API
-        if (window.electronAPI?.checkGitHubRelease) {
+        if (window.electronAPI?.checkGitHubRelease && !isRateLimited) {
           try {
             const elRes = await window.electronAPI.checkGitHubRelease();
             if (elRes && elRes.success && elRes.release) {
               releaseData = elRes.release;
+            } else if (elRes && elRes.error && String(elRes.error).includes('403')) {
+              isRateLimited = true;
             }
           } catch (e) { }
         }
 
-        // 2. Try direct fetch to GitHub REST API
-        if (!releaseData) {
-          const res = await fetch(GITHUB_RELEASES_API, {
-            headers: { Accept: 'application/vnd.github.v3+json' }
-          });
-          if (res.ok) {
-            releaseData = await res.json();
-          }
+        // 2. Try direct fetch to GitHub REST API if not rate-limited
+        if (!releaseData && !isRateLimited) {
+          try {
+            const res = await fetch(GITHUB_RELEASES_API, {
+              headers: { Accept: 'application/vnd.github.v3+json' }
+            });
+            if (res.ok) {
+              releaseData = await res.json();
+            } else if (res.status === 403) {
+              isRateLimited = true; // GitHub API rate limit reached, switch to raw CDN fallback
+            }
+          } catch (e) { }
         }
 
-        // 3. Fallback: try raw package.json to avoid rate limits
+        // 3. Fallback: try raw package.json (CDN - Zero API Rate Limits!)
         if (!releaseData) {
           try {
             const rawRes = await fetch(`https://raw.githubusercontent.com/${GITHUB_REPO}/main/package.json?t=${Date.now()}`);
@@ -124,7 +131,14 @@ export default function SoftwareVersionAlert({ settings = {}, toast, style = {},
               if (rawPkg.version) {
                 releaseData = {
                   tag_name: `v${rawPkg.version}`,
-                  assets: []
+                  name: `Sri Venkateswara Steels - ERP v${rawPkg.version}`,
+                  body: `Release v${rawPkg.version}`,
+                  assets: [
+                    {
+                      name: `Sri Venkateswara Steels Setup ${rawPkg.version}.exe`,
+                      browser_download_url: `https://github.com/${GITHUB_REPO}/releases/download/v${rawPkg.version}/Sri.Venkateswara.Steels.Setup.${rawPkg.version}.exe`
+                    }
+                  ]
                 };
               }
             }
@@ -177,11 +191,11 @@ export default function SoftwareVersionAlert({ settings = {}, toast, style = {},
       }
     };
 
-    // Initial check after 500ms
-    const initialTimer = setTimeout(runCheck, 500);
+    // Initial check after 1.5s
+    const initialTimer = setTimeout(runCheck, 1500);
 
-    // Recurring check every 10 seconds exactly as requested
-    const intervalTimer = setInterval(runCheck, 10000);
+    // Recurring check every 10 minutes to respect GitHub API limits
+    const intervalTimer = setInterval(runCheck, 600000);
 
     return () => {
       isMounted = false;

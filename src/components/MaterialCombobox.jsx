@@ -48,6 +48,7 @@ export function InwardMaterialCombobox({
   const inputRef = useRef(null);
   const listRef = useRef(null);
   const itemRefs = useRef([]);
+  const isComposingRef = useRef(false);
 
   // Sync external name changes into query when not actively editing
   useEffect(() => {
@@ -131,8 +132,7 @@ export function InwardMaterialCombobox({
     return () => document.removeEventListener('mousedown', handleDocClick);
   }, [isOpen]);
 
-  const handleInputChange = e => {
-    const val = e.target.value;
+  const processQueryInput = val => {
     setQuery(val);
     const trimmed = val.trim();
 
@@ -176,8 +176,23 @@ export function InwardMaterialCombobox({
     }
   };
 
+  const handleInputChange = e => {
+    if (isComposingRef.current || e.nativeEvent?.isComposing) {
+      return;
+    }
+    processQueryInput(e.target.value);
+  };
+
+  const handleCompositionEnd = e => {
+    isComposingRef.current = false;
+    processQueryInput(e.target.value);
+  };
+
   // Keyboard navigation
   const handleKeyDown = e => {
+    if (isComposingRef.current || e.nativeEvent?.isComposing || e.keyCode === 229 || e.key === 'Process') {
+      return;
+    }
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       if (!isOpen) {
@@ -253,7 +268,18 @@ export function InwardMaterialCombobox({
           }}
           placeholder={placeholder}
           value={query}
+          onCompositionStart={() => {
+            isComposingRef.current = true;
+          }}
+          onCompositionUpdate={() => {
+            isComposingRef.current = true;
+          }}
+          onCompositionEnd={handleCompositionEnd}
           onChange={handleInputChange}
+          onBlur={e => {
+            isComposingRef.current = false;
+            processQueryInput(e.target.value);
+          }}
           onKeyDown={handleKeyDown}
           autoComplete="off"
         />
@@ -423,6 +449,7 @@ export function InwardTamilMaterialInput({
   const inputRef = useRef(null);
   const listRef = useRef(null);
   const itemRefs = useRef([]);
+  const isComposingRef = useRef(false);
 
   // Sync external nameTa changes into query
   useEffect(() => {
@@ -499,8 +526,7 @@ export function InwardTamilMaterialInput({
     return () => document.removeEventListener('mousedown', handleDocClick);
   }, [isOpen]);
 
-  const handleInputChange = e => {
-    const val = e.target.value;
+  const processTamilInput = val => {
     setQuery(val);
     onChangeTamilName(val);
     if (val.trim()) {
@@ -509,6 +535,18 @@ export function InwardTamilMaterialInput({
     } else {
       setIsOpen(false);
     }
+  };
+
+  const handleInputChange = e => {
+    if (isComposingRef.current || e.nativeEvent?.isComposing) {
+      return;
+    }
+    processTamilInput(e.target.value);
+  };
+
+  const handleCompositionEnd = e => {
+    isComposingRef.current = false;
+    processTamilInput(e.target.value);
   };
 
   const handlePickItem = item => {
@@ -521,6 +559,9 @@ export function InwardTamilMaterialInput({
   };
 
   const handleKeyDown = e => {
+    if (isComposingRef.current || e.nativeEvent?.isComposing || e.keyCode === 229 || e.key === 'Process') {
+      return;
+    }
     if (e.key === 'ArrowDown') {
       if (!isOpen && matchingItems.length > 0) {
         setIsOpen(true);
@@ -563,7 +604,18 @@ export function InwardTamilMaterialInput({
         }}
         placeholder={placeholder}
         value={query}
+        onCompositionStart={() => {
+          isComposingRef.current = true;
+        }}
+        onCompositionUpdate={() => {
+          isComposingRef.current = true;
+        }}
+        onCompositionEnd={handleCompositionEnd}
         onChange={handleInputChange}
+        onBlur={e => {
+          isComposingRef.current = false;
+          processTamilInput(e.target.value);
+        }}
         onKeyDown={handleKeyDown}
         autoComplete="off"
       />
@@ -718,6 +770,7 @@ export function IssueMaterialCombobox({
   const inputRef = useRef(null);
   const listRef = useRef(null);
   const itemRefs = useRef([]);
+  const isComposingRef = useRef(false);
 
   // Sync external selectedId and language into query
   useEffect(() => {
@@ -815,8 +868,7 @@ export function IssueMaterialCombobox({
     return () => document.removeEventListener('mousedown', handleDocClick);
   }, [isOpen, selectedItem]);
 
-  const handleInputChange = e => {
-    const val = e.target.value;
+  const processQueryInput = val => {
     setQuery(val);
     const trimmed = val.trim();
 
@@ -832,7 +884,22 @@ export function IssueMaterialCombobox({
     updatePosition();
   };
 
+  const handleInputChange = e => {
+    if (isComposingRef.current || e.nativeEvent?.isComposing) {
+      return;
+    }
+    processQueryInput(e.target.value);
+  };
+
+  const handleCompositionEnd = e => {
+    isComposingRef.current = false;
+    processQueryInput(e.target.value);
+  };
+
   const handleKeyDown = e => {
+    if (isComposingRef.current || e.nativeEvent?.isComposing || e.keyCode === 229 || e.key === 'Process') {
+      return;
+    }
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       if (!isOpen) {
@@ -947,7 +1014,18 @@ export function IssueMaterialCombobox({
           }}
           placeholder={placeholder}
           value={query}
+          onCompositionStart={() => {
+            isComposingRef.current = true;
+          }}
+          onCompositionUpdate={() => {
+            isComposingRef.current = true;
+          }}
+          onCompositionEnd={handleCompositionEnd}
           onChange={handleInputChange}
+          onBlur={e => {
+            isComposingRef.current = false;
+            processQueryInput(e.target.value);
+          }}
           onKeyDown={handleKeyDown}
           autoComplete="off"
         />

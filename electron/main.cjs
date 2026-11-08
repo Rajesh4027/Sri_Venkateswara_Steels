@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell, ipcMain } = require('electron');
+const { app, BrowserWindow, shell, ipcMain, dialog } = require('electron');
 const path = require('path');
 const https = require('https');
 const fs = require('fs');
@@ -93,6 +93,37 @@ ipcMain.handle('sync-all-images', async (event, invoices = []) => {
       }
     }
     return { success: true, savedCount, imagesDir: dir };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+// IPC: Native File Save Dialog & Writer (for Exports like Excel, CSV, JSON Backups)
+ipcMain.handle('save-file', async (event, payload) => {
+  try {
+    const { filename, content, defaultPath, isBase64 } = payload || {};
+    if (!filename || content === undefined) {
+      return { success: false, error: 'Filename and content are required' };
+    }
+    const defaultDir = defaultPath || app.getPath('downloads');
+    const targetPath = path.join(defaultDir, filename);
+
+    const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+      title: 'Save File - Sri Venkateswara Steels ERP',
+      defaultPath: targetPath
+    });
+
+    if (canceled || !filePath) {
+      return { success: false, canceled: true };
+    }
+
+    if (isBase64) {
+      fs.writeFileSync(filePath, Buffer.from(content, 'base64'));
+    } else {
+      fs.writeFileSync(filePath, content, 'utf8');
+    }
+
+    return { success: true, filePath };
   } catch (err) {
     return { success: false, error: err.message };
   }
@@ -314,10 +345,15 @@ function createWindow() {
     return { action: 'allow' };
   });
 
-  // Guard against any spontaneous browser Save-As dialogs inside Electron
+  // Handle downloads inside Electron (allow user to save exported files)
   if (mainWindow.webContents.session) {
-    mainWindow.webContents.session.on('will-download', (event) => {
-      event.preventDefault();
+    mainWindow.webContents.session.on('will-download', (event, item) => {
+      const defaultDir = app.getPath('downloads');
+      const filename = item.getFilename();
+      item.setSaveDialogOptions({
+        title: 'Save File - Sri Venkateswara Steels ERP',
+        defaultPath: path.join(defaultDir, filename)
+      });
     });
   }
 
