@@ -787,6 +787,26 @@ export default function IssueBill({ items, bills, setBills, setItems, preset, to
     if (toast) toast(`Editing row #${k + 1}. Adjust fields above and click Update Item.`);
   };
 
+  // Cancel editing item from table
+  const handleCancelEdit = () => {
+    setEditingIndex(null);
+    setActiveLine({ id: '', qty: 1, weight: '', weightUnit: 'KGS', uom: 'KGS', rate: 0, gst: 18 });
+    if (toast) toast(lang === 'ta' ? 'பொருள் திருத்துதல் ரத்து செய்யப்பட்டது.' : 'Item update cancelled.');
+  };
+
+  // Clear all customer and dispatch inputs
+  const handleClearCustomerData = () => {
+    setView(null);
+    setH(prev => ({
+      ...prev,
+      phone: '',
+      cust: '',
+      address: '',
+      veh: ''
+    }));
+    if (toast) toast(lang === 'ta' ? 'வாடிக்கையாளர் விவரங்கள் அழிக்கப்பட்டது.' : 'Customer details cleared.');
+  };
+
   // Delete item from table
   const handleDeleteLine = (k) => {
     const next = ls.filter((_, idx) => idx !== k);
@@ -1075,19 +1095,44 @@ export default function IssueBill({ items, bills, setBills, setItems, preset, to
         <div className="issue-card-section">
           <div className="issue-card-header">
             <div className="issue-card-title">
-              <Ic n="user" s={16} /> Customer & Dispatch Information
+              <Ic n="user" s={16} /> Customer &amp; Dispatch Information
             </div>
-            <button
-              type="button"
-              className="auto-fetch-pill-btn"
-              onClick={() => {
-                const el = document.querySelector('input[type="tel"]');
-                if (el) el.focus();
-                toast && toast('⚡ Type phone or customer name to autofill details');
-              }}
-            >
-              <Ic n="zap" s={13} /> Auto-Fetch Details
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {(h.phone || h.cust || h.address || h.veh) && (
+                <button
+                  type="button"
+                  onClick={handleClearCustomerData}
+                  style={{
+                    background: '#FEF2F2',
+                    border: '1.5px solid #FCA5A5',
+                    borderRadius: 8,
+                    padding: '4px 10px',
+                    fontSize: 11.5,
+                    fontWeight: 700,
+                    color: '#DC2626',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 5,
+                    transition: 'all 0.15s ease'
+                  }}
+                  title={lang === 'ta' ? 'அனைத்து வாடிக்கையாளர் விவரங்களையும் அழிக்கவும்' : 'Clear all customer dispatch fields'}
+                >
+                  <Ic n="x" s={13} /> {lang === 'ta' ? 'விவரங்களை அழி' : 'Clear Details'}
+                </button>
+              )}
+              <button
+                type="button"
+                className="auto-fetch-pill-btn"
+                onClick={() => {
+                  const el = document.querySelector('input[type="tel"]');
+                  if (el) el.focus();
+                  toast && toast('⚡ Type phone or customer name to autofill details');
+                }}
+              >
+                <Ic n="zap" s={13} /> Auto-Fetch Details
+              </button>
+            </div>
           </div>
 
           <div className="issue-customer-grid">
@@ -1113,6 +1158,7 @@ export default function IssueBill({ items, bills, setBills, setItems, preset, to
                   setH({ ...h, phone: val });
                 }}
                 onSelectCustomer={handleSelectCustomer}
+                onClearAll={handleClearCustomerData}
               />
             </div>
 
@@ -1131,9 +1177,10 @@ export default function IssueBill({ items, bills, setBills, setItems, preset, to
                 customers={customerDirectory}
                 onChange={val => {
                   setView(null);
-                  setH({ ...h, cust: formatCustomerName(val) });
+                  setH({ ...h, cust: val });
                 }}
                 onSelectCustomer={handleSelectCustomer}
+                onClearAll={handleClearCustomerData}
               />
             </div>
 
@@ -1142,7 +1189,7 @@ export default function IssueBill({ items, bills, setBills, setItems, preset, to
               <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: 'var(--navy)', marginBottom: 5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {t('toAddress')}
               </label>
-              <div className="input-icon-wrap">
+              <div className="input-icon-wrap" style={{ position: 'relative' }}>
                 <span className="input-prefix-icon"><Ic n="mapPin" s={14} /></span>
                 <input
                   className="in with-prefix"
@@ -1152,8 +1199,34 @@ export default function IssueBill({ items, bills, setBills, setItems, preset, to
                     setView(null);
                     setH({ ...h, address: e.target.value });
                   }}
-                  style={{ height: 38, fontSize: 13, fontWeight: 500, width: '100%', boxSizing: 'border-box' }}
+                  style={{ height: 38, fontSize: 13, fontWeight: 500, width: '100%', boxSizing: 'border-box', paddingRight: h.address ? 28 : 12 }}
                 />
+                {h.address && (
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    onClick={() => {
+                      setView(null);
+                      setH({ ...h, address: '' });
+                    }}
+                    style={{
+                      position: 'absolute',
+                      right: 8,
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'transparent',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: 'var(--mut)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: 2
+                    }}
+                    title="Clear address"
+                  >
+                    <Ic n="x" s={13} />
+                  </button>
+                )}
               </div>
             </div>
 
@@ -1162,18 +1235,44 @@ export default function IssueBill({ items, bills, setBills, setItems, preset, to
               <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: 'var(--navy)', marginBottom: 5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                 {t('vehicleNumber')}
               </label>
-              <div className="input-icon-wrap">
+              <div className="input-icon-wrap" style={{ position: 'relative' }}>
                 <span className="input-prefix-icon"><Ic n="truck" s={14} /></span>
                 <input
                   className="in with-prefix"
                   placeholder={t('vehiclePlaceholder')}
-                  style={{ textTransform: 'uppercase', fontWeight: 700, height: 38, fontSize: 13, width: '100%', boxSizing: 'border-box' }}
+                  style={{ textTransform: 'uppercase', fontWeight: 700, height: 38, fontSize: 13, width: '100%', boxSizing: 'border-box', paddingRight: h.veh ? 28 : 12 }}
                   value={h.veh || ''}
                   onChange={e => {
                     setView(null);
                     setH({ ...h, veh: e.target.value.toUpperCase() });
                   }}
                 />
+                {h.veh && (
+                  <button
+                    type="button"
+                    tabIndex={-1}
+                    onClick={() => {
+                      setView(null);
+                      setH({ ...h, veh: '' });
+                    }}
+                    style={{
+                      position: 'absolute',
+                      right: 8,
+                      top: '50%',
+                      transform: 'translateY(-50%)',
+                      background: 'transparent',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: 'var(--mut)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: 2
+                    }}
+                    title="Clear vehicle number"
+                  >
+                    <Ic n="x" s={13} />
+                  </button>
+                )}
               </div>
             </div>
 
@@ -1545,20 +1644,59 @@ export default function IssueBill({ items, bills, setBills, setItems, preset, to
               </select>
             </div>
 
-            {/* Col 7: + Add Item / Update Button */}
+            {/* Col 7: + Add Item / Update Button & Cancel Edit Button */}
             <div>
               <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'transparent', marginBottom: 4, userSelect: 'none' }}>
                 &nbsp;
               </label>
-              <button
-                type="button"
-                className="btn-add-item"
-                style={{ width: '100%' }}
-                onClick={handleAddActiveLine}
-              >
-                <Ic n={editingIndex !== null ? 'check' : 'plus'} s={15} />
-                {editingIndex !== null ? (lang === 'ta' ? 'பொருளை புதுப்பி' : 'Update Item') : (lang === 'ta' ? '+ பொருளைச் சேர்' : '+ Add Item')}
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <button
+                  type="button"
+                  className="btn-add-item"
+                  style={{ flex: 1, padding: editingIndex !== null ? '0 10px' : '0 14px' }}
+                  onClick={handleAddActiveLine}
+                >
+                  <Ic n={editingIndex !== null ? 'check' : 'plus'} s={15} />
+                  {editingIndex !== null ? (lang === 'ta' ? 'பொருளை புதுப்பி' : 'Update Item') : (lang === 'ta' ? '+ பொருளைச் சேர்' : '+ Add Item')}
+                </button>
+
+                {editingIndex !== null && (
+                  <button
+                    type="button"
+                    className="btn-cancel-edit"
+                    onClick={handleCancelEdit}
+                    title={lang === 'ta' ? 'திருத்துவதை ரத்து செய்' : 'Cancel update'}
+                    style={{
+                      height: 38,
+                      width: 38,
+                      minWidth: 38,
+                      borderRadius: 10,
+                      border: '1.5px solid #CBD5E1',
+                      background: '#ffffff',
+                      color: '#64748B',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                      boxSizing: 'border-box',
+                      flexShrink: 0
+                    }}
+                    onMouseEnter={e => {
+                      e.currentTarget.style.background = '#FEE2E2';
+                      e.currentTarget.style.borderColor = '#FCA5A5';
+                      e.currentTarget.style.color = '#DC2626';
+                    }}
+                    onMouseLeave={e => {
+                      e.currentTarget.style.background = '#ffffff';
+                      e.currentTarget.style.borderColor = '#CBD5E1';
+                      e.currentTarget.style.color = '#64748B';
+                    }}
+                  >
+                    <Ic n="x" s={16} />
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 

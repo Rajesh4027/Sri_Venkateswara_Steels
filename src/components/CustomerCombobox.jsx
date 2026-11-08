@@ -37,6 +37,7 @@ export default function CustomerAutofillInput({
   customers = [],
   onChange,
   onSelectCustomer,
+  onClearAll,
   inputStyle = {},
   containerStyle = {},
   prefixIcon,
@@ -50,6 +51,7 @@ export default function CustomerAutofillInput({
   const inputRef = useRef(null);
   const listRef = useRef(null);
   const itemRefs = useRef([]);
+  const isComposingRef = useRef(false);
 
   // Compute matching customers
   const matchingCustomers = useMemo(() => {
@@ -154,21 +156,9 @@ export default function CustomerAutofillInput({
   }, [isOpen]);
 
   const handleInputChange = e => {
-    const input = e.target;
-    let val = input.value;
-    if (field === 'cust') {
-      const selStart = input.selectionStart;
-      const selEnd = input.selectionEnd;
-      val = formatCustomerName(val);
-      onChange(val);
-      requestAnimationFrame(() => {
-        if (input && input.setSelectionRange) {
-          input.setSelectionRange(selStart, selEnd);
-        }
-      });
-    } else {
-      onChange(val);
-    }
+    const val = e.target.value;
+    onChange(val);
+
     if (val.trim().length > 0) {
       setIsOpen(true);
       setActiveIndex(0);
@@ -256,11 +246,26 @@ export default function CustomerAutofillInput({
           type={field === 'phone' ? 'tel' : 'text'}
           placeholder={placeholder}
           value={value}
+          onCompositionStart={() => {
+            isComposingRef.current = true;
+          }}
+          onCompositionEnd={e => {
+            isComposingRef.current = false;
+            handleInputChange(e);
+          }}
           onChange={handleInputChange}
           onFocus={() => {
             if ((value || '').trim().length > 0 && matchingCustomers.length > 0) {
               setIsOpen(true);
               updatePosition();
+            }
+          }}
+          onBlur={() => {
+            if (field === 'cust' && value) {
+              const formatted = formatCustomerName(value);
+              if (formatted !== value) {
+                onChange(formatted);
+              }
             }
           }}
           onKeyDown={handleKeyDown}
@@ -281,7 +286,11 @@ export default function CustomerAutofillInput({
             type="button"
             tabIndex={-1}
             onClick={() => {
-              onChange('');
+              if (onClearAll) {
+                onClearAll();
+              } else {
+                onChange('');
+              }
               setIsOpen(false);
               if (inputRef.current) inputRef.current.focus();
             }}
@@ -296,7 +305,7 @@ export default function CustomerAutofillInput({
               alignItems: 'center',
               padding: 2
             }}
-            title="Clear field"
+            title={onClearAll ? "Clear all customer details" : "Clear field"}
           >
             <Ic n="x" s={14} />
           </button>

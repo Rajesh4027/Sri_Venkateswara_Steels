@@ -23,7 +23,7 @@ function isNewerVersion(remote, local) {
   return false;
 }
 
-const CURRENT_APP_VERSION = 'v2.8.0';
+const CURRENT_APP_VERSION = 'v2.8.1';
 const GITHUB_REPO = 'Rajesh4027/Sri_Venkateswara_Steels';
 const GITHUB_RELEASES_API = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
 

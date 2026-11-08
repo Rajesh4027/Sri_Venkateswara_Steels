@@ -1306,7 +1306,7 @@ select.with-prefix {
 /* ── 5. Quick-Add Row & Materials Table ── */
 .issue-quick-add-grid {
   display: grid;
-  grid-template-columns: minmax(230px, 3.4fr) minmax(75px, 0.85fr) minmax(130px, 1.3fr) minmax(85px, 0.9fr) minmax(95px, 1fr) minmax(105px, 1.1fr) minmax(120px, 1.2fr);
+  grid-template-columns: minmax(220px, 3.2fr) minmax(70px, 0.8fr) minmax(130px, 1.3fr) minmax(80px, 0.85fr) minmax(90px, 0.95fr) minmax(105px, 1.1fr) minmax(140px, 1.4fr);
   gap: 10px;
   align-items: start;
   width: 100%;
@@ -1353,6 +1353,29 @@ select.with-prefix {
 .btn-add-item:hover {
   transform: translateY(-1px);
   box-shadow: 0 4px 12px rgba(217, 119, 6, 0.35);
+}
+
+.btn-cancel-edit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 38px;
+  width: 38px;
+  min-width: 38px;
+  border-radius: 10px;
+  border: 1.5px solid #CBD5E1;
+  background: #ffffff;
+  color: #64748B;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-sizing: border-box;
+  flex-shrink: 0;
+}
+
+.btn-cancel-edit:hover {
+  background: #FEE2E2 !important;
+  border-color: #FCA5A5 !important;
+  color: #DC2626 !important;
 }
 
 .issue-table-wrap {
