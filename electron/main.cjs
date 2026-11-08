@@ -1,6 +1,7 @@
 const { app, BrowserWindow, shell, ipcMain, dialog } = require('electron');
 const path = require('path');
 const https = require('https');
+const http = require('http');
 const fs = require('fs');
 const { spawn } = require('child_process');
 
@@ -129,31 +130,89 @@ ipcMain.handle('save-file', async (event, payload) => {
   }
 });
 
-ipcMain.handle('check-github-release', async () => {
-  return new Promise((resolve) => {
-    const options = {
-      hostname: 'api.github.com',
-      path: '/repos/Rajesh4027/Sri_Venkateswara_Steels/releases/latest',
+function fetchJsonWithRedirects(targetUrl, maxRedirects = 5) {
+  return new Promise((resolve, reject) => {
+    if (maxRedirects <= 0) return reject(new Error('Too many redirects'));
+    const client = targetUrl.startsWith('http:') ? http : https;
+    const req = client.get(targetUrl, {
       headers: {
         'User-Agent': 'Sri-Venkateswara-Steels-ERP',
-        'Accept': 'application/vnd.github.v3+json'
+        'Accept': 'application/json, text/plain, */*'
       }
-    };
-    https.get(options, (res) => {
+    }, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        return resolve(fetchJsonWithRedirects(res.headers.location, maxRedirects - 1));
+      }
+      if (res.statusCode !== 200) {
+        return reject(new Error(`HTTP ${res.statusCode}`));
+      }
       let data = '';
       res.on('data', chunk => { data += chunk; });
       res.on('end', () => {
         try {
-          const json = JSON.parse(data);
-          resolve({ success: true, release: json });
+          resolve(JSON.parse(data));
         } catch (e) {
-          resolve({ success: false, error: e.message });
+          reject(e);
         }
       });
-    }).on('error', (err) => {
-      resolve({ success: false, error: err.message });
+    });
+    req.on('error', reject);
+    req.setTimeout(8000, () => {
+      req.destroy();
+      reject(new Error('Request timed out'));
     });
   });
+}
+
+ipcMain.handle('check-github-release', async () => {
+  // 1. Check Fastly CDN version.json FIRST - Zero GitHub API rate limits!
+  try {
+    const rawVerUrl = `https://raw.githubusercontent.com/Rajesh4027/Sri_Venkateswara_Steels/main/version.json?t=${Date.now()}`;
+    const verData = await fetchJsonWithRedirects(rawVerUrl);
+    if (verData && verData.tag_name) {
+      return { success: true, release: verData };
+    }
+  } catch (cdnErr) {
+    // Continue to next fallback
+  }
+
+  // 2. Check Fastly CDN package.json fallback - Zero GitHub API rate limits!
+  try {
+    const pkgUrl = `https://raw.githubusercontent.com/Rajesh4027/Sri_Venkateswara_Steels/main/package.json?t=${Date.now()}`;
+    const pkgData = await fetchJsonWithRedirects(pkgUrl);
+    if (pkgData && pkgData.version) {
+      const tag = `v${pkgData.version}`;
+      return {
+        success: true,
+        release: {
+          tag_name: tag,
+          name: `Sri Venkateswara Steels ERP ${tag}`,
+          body: `Release ${tag}`,
+          assets: [
+            {
+              name: `Sri.Venkateswara.Steels.Setup.${pkgData.version}.exe`,
+              browser_download_url: `https://github.com/Rajesh4027/Sri_Venkateswara_Steels/releases/download/${tag}/Sri.Venkateswara.Steels.Setup.${pkgData.version}.exe`
+            }
+          ]
+        }
+      };
+    }
+  } catch (pkgErr) {
+    // Continue to next fallback
+  }
+
+  // 3. Fallback to GitHub REST API (Strictly require HTTP 200 and tag_name)
+  try {
+    const apiUrl = 'https://api.github.com/repos/Rajesh4027/Sri_Venkateswara_Steels/releases/latest';
+    const apiData = await fetchJsonWithRedirects(apiUrl);
+    if (apiData && apiData.tag_name) {
+      return { success: true, release: apiData };
+    }
+  } catch (apiErr) {
+    // Both failed
+  }
+
+  return { success: false, error: 'Unable to reach update servers' };
 });
 
 let downloadedInstallerPath = null;

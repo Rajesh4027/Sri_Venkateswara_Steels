@@ -455,34 +455,60 @@ export default function SettingsPage({
     try {
       let releaseData = null;
 
-      // 1. Try via Electron API
-      if (window.electronAPI?.checkGitHubRelease) {
-        try {
-          const elRes = await window.electronAPI.checkGitHubRelease();
-          if (elRes && elRes.success && elRes.release) {
-            releaseData = elRes.release;
+      // 1. Try Fastly CDN (raw version.json) FIRST! - Zero GitHub API rate limits!
+      try {
+        const rawVerRes = await fetch(`https://raw.githubusercontent.com/${GITHUB_REPO}/main/version.json?t=${Date.now()}`);
+        if (rawVerRes.ok) {
+          const rawVer = await rawVerRes.json();
+          if (rawVer && rawVer.tag_name) {
+            releaseData = rawVer;
           }
-        } catch (e) { }
-      }
-
-      // 2. Direct fetch to GitHub releases API
-      if (!releaseData) {
-        const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, {
-          headers: { Accept: 'application/vnd.github.v3+json' }
-        });
-        if (res.ok) {
-          releaseData = await res.json();
         }
-      }
+      } catch (e) { }
 
-      // 3. Fallback via raw package.json to avoid rate limits
+      // 2. Try raw package.json fallback - Zero GitHub API rate limits!
       if (!releaseData) {
         try {
           const rawRes = await fetch(`https://raw.githubusercontent.com/${GITHUB_REPO}/main/package.json?t=${Date.now()}`);
           if (rawRes.ok) {
             const rawPkg = await rawRes.json();
             if (rawPkg.version) {
-              releaseData = { tag_name: `v${rawPkg.version}`, assets: [] };
+              releaseData = {
+                tag_name: `v${rawPkg.version}`,
+                name: `Sri Venkateswara Steels - ERP v${rawPkg.version}`,
+                body: `Release v${rawPkg.version}`,
+                assets: [
+                  {
+                    name: `Sri.Venkateswara.Steels.Setup.${rawPkg.version}.exe`,
+                    browser_download_url: `https://github.com/${GITHUB_REPO}/releases/download/v${rawPkg.version}/Sri.Venkateswara.Steels.Setup.${rawPkg.version}.exe`
+                  }
+                ]
+              };
+            }
+          }
+        } catch (e) { }
+      }
+
+      // 3. Try via Electron API (which also checks Fastly CDN first)
+      if (!releaseData && window.electronAPI?.checkGitHubRelease) {
+        try {
+          const elRes = await window.electronAPI.checkGitHubRelease();
+          if (elRes && elRes.success && elRes.release && elRes.release.tag_name) {
+            releaseData = elRes.release;
+          }
+        } catch (e) { }
+      }
+
+      // 4. Try direct fetch to GitHub releases API (only if status is 200 and has tag_name)
+      if (!releaseData) {
+        try {
+          const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/releases/latest`, {
+            headers: { Accept: 'application/vnd.github.v3+json' }
+          });
+          if (res.ok) {
+            const json = await res.json();
+            if (json && json.tag_name) {
+              releaseData = json;
             }
           }
         } catch (e) { }
@@ -501,6 +527,9 @@ export default function SettingsPage({
             a.name && a.name.includes('Setup') && a.name.endsWith('.exe')
           ) || releaseData.assets.find(a => a.name && a.name.endsWith('.exe'));
           if (asset && asset.browser_download_url) setupUrl = asset.browser_download_url;
+        }
+        if (!setupUrl && releaseData.setupUrl) {
+          setupUrl = releaseData.setupUrl;
         }
         if (!setupUrl) {
           setupUrl = `https://github.com/${GITHUB_REPO}/releases/download/${remoteTag}/Sri.Venkateswara.Steels.Setup.${remoteTag.replace(/^v/, '')}.exe`;
@@ -524,22 +553,24 @@ export default function SettingsPage({
         }
       } else {
         setUpdateStatus({
-          upToDate: true,
+          upToDate: false,
+          error: true,
           version: CURRENT_APP_VERSION,
           checkedAt: new Date().toLocaleTimeString(),
-          notes: `You are on the latest release (${CURRENT_APP_VERSION}). All steel GST Chapter 72 & 73 compliance tax rules are up to date.`
+          notes: `Unable to verify update server right now. Please check your internet connection or install latest release directly.`
         });
-        toast(`✓ Running ${CURRENT_APP_VERSION}`);
+        toast('Unable to check for updates at this moment');
       }
     } catch (err) {
       setCheckingUpdate(false);
       setUpdateStatus({
-        upToDate: true,
+        upToDate: false,
+        error: true,
         version: CURRENT_APP_VERSION,
         checkedAt: new Date().toLocaleTimeString(),
-        notes: `You are on release ${CURRENT_APP_VERSION}. All steel GST Chapter 72 & 73 compliance tax rules are up to date.`
+        notes: `Unable to reach update servers. Please check your internet connection.`
       });
-      toast(`✓ Running ${CURRENT_APP_VERSION}`);
+      toast('Network error checking updates');
     }
   };
 

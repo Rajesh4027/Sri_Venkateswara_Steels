@@ -86,7 +86,7 @@ export default function SoftwareVersionAlert({ settings = {}, toast, style = {},
     } catch (e) { }
   }, [toast]);
 
-  // Periodic GitHub releases API check engine (every 10 seconds)
+  // Periodic GitHub releases check engine (checks Fastly CDN first to avoid all rate limits)
   useEffect(() => {
     let isMounted = true;
     let isRateLimited = false;
@@ -96,33 +96,18 @@ export default function SoftwareVersionAlert({ settings = {}, toast, style = {},
         const activeVer = localStorage.getItem('svs_app_version') || CURRENT_APP_VERSION;
         let releaseData = null;
 
-        // 1. Try via Electron API
-        if (window.electronAPI?.checkGitHubRelease && !isRateLimited) {
-          try {
-            const elRes = await window.electronAPI.checkGitHubRelease();
-            if (elRes && elRes.success && elRes.release) {
-              releaseData = elRes.release;
-            } else if (elRes && elRes.error && String(elRes.error).includes('403')) {
-              isRateLimited = true;
+        // 1. Try Fastly CDN (raw version.json) FIRST! - Zero API rate limits!
+        try {
+          const rawVerRes = await fetch(`https://raw.githubusercontent.com/${GITHUB_REPO}/main/version.json?t=${Date.now()}`);
+          if (rawVerRes.ok) {
+            const rawVer = await rawVerRes.json();
+            if (rawVer && rawVer.tag_name) {
+              releaseData = rawVer;
             }
-          } catch (e) { }
-        }
+          }
+        } catch (e) { }
 
-        // 2. Try direct fetch to GitHub REST API if not rate-limited
-        if (!releaseData && !isRateLimited) {
-          try {
-            const res = await fetch(GITHUB_RELEASES_API, {
-              headers: { Accept: 'application/vnd.github.v3+json' }
-            });
-            if (res.ok) {
-              releaseData = await res.json();
-            } else if (res.status === 403) {
-              isRateLimited = true; // GitHub API rate limit reached, switch to raw CDN fallback
-            }
-          } catch (e) { }
-        }
-
-        // 3. Fallback: try raw package.json (CDN - Zero API Rate Limits!)
+        // 2. Try raw package.json fallback - Zero API rate limits!
         if (!releaseData) {
           try {
             const rawRes = await fetch(`https://raw.githubusercontent.com/${GITHUB_REPO}/main/package.json?t=${Date.now()}`);
@@ -135,12 +120,41 @@ export default function SoftwareVersionAlert({ settings = {}, toast, style = {},
                   body: `Release v${rawPkg.version}`,
                   assets: [
                     {
-                      name: `Sri Venkateswara Steels Setup ${rawPkg.version}.exe`,
+                      name: `Sri.Venkateswara.Steels.Setup.${rawPkg.version}.exe`,
                       browser_download_url: `https://github.com/${GITHUB_REPO}/releases/download/v${rawPkg.version}/Sri.Venkateswara.Steels.Setup.${rawPkg.version}.exe`
                     }
                   ]
                 };
               }
+            }
+          } catch (e) { }
+        }
+
+        // 3. Try via Electron API (which also checks CDN first)
+        if (!releaseData && window.electronAPI?.checkGitHubRelease && !isRateLimited) {
+          try {
+            const elRes = await window.electronAPI.checkGitHubRelease();
+            if (elRes && elRes.success && elRes.release && elRes.release.tag_name) {
+              releaseData = elRes.release;
+            } else if (elRes && elRes.error && String(elRes.error).includes('403')) {
+              isRateLimited = true;
+            }
+          } catch (e) { }
+        }
+
+        // 4. Try direct fetch to GitHub REST API if not rate-limited
+        if (!releaseData && !isRateLimited) {
+          try {
+            const res = await fetch(GITHUB_RELEASES_API, {
+              headers: { Accept: 'application/vnd.github.v3+json' }
+            });
+            if (res.ok) {
+              const json = await res.json();
+              if (json && json.tag_name) {
+                releaseData = json;
+              }
+            } else if (res.status === 403) {
+              isRateLimited = true; // GitHub API rate limit reached
             }
           } catch (e) { }
         }
@@ -162,6 +176,9 @@ export default function SoftwareVersionAlert({ settings = {}, toast, style = {},
               if (setupAsset && setupAsset.browser_download_url) {
                 setupUrl = setupAsset.browser_download_url;
               }
+            }
+            if (!setupUrl && releaseData.setupUrl) {
+              setupUrl = releaseData.setupUrl;
             }
             if (!setupUrl) {
               setupUrl = `https://github.com/${GITHUB_REPO}/releases/download/${remoteTag}/Sri.Venkateswara.Steels.Setup.${remoteTag.replace(/^v/, '')}.exe`;
@@ -191,11 +208,11 @@ export default function SoftwareVersionAlert({ settings = {}, toast, style = {},
       }
     };
 
-    // Initial check after 1.5s
-    const initialTimer = setTimeout(runCheck, 1500);
+    // Initial check after 2s
+    const initialTimer = setTimeout(runCheck, 2000);
 
-    // Recurring check every 10 minutes to respect GitHub API limits
-    const intervalTimer = setInterval(runCheck, 600000);
+    // Recurring check every 15 minutes
+    const intervalTimer = setInterval(runCheck, 900000);
 
     return () => {
       isMounted = false;

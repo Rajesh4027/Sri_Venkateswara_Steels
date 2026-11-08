@@ -1,0 +1,18 @@
+{
+  "version": "2.8.2",
+  "tag_name": "v2.8.2",
+  "name": "Sri Venkateswara Steels ERP v2.8.2",
+  "notes": "Official Release v2.8.2: fixed desktop file downloads, delivery history date filtering, and Tamil phonetic IME typing.",
+  "published_at": "2026-11-09T01:21:00Z",
+  "setupUrl": "https://github.com/Rajesh4027/Sri_Venkateswara_Steels/releases/download/v2.8.2/Sri.Venkateswara.Steels.Setup.2.8.2.exe",
+  "assets": [
+    {
+      "name": "Sri.Venkateswara.Steels.Setup.2.8.2.exe",
+      "browser_download_url": "https://github.com/Rajesh4027/Sri_Venkateswara_Steels/releases/download/v2.8.2/Sri.Venkateswara.Steels.Setup.2.8.2.exe"
+    },
+    {
+      "name": "Sri Venkateswara Steels Setup 2.8.2.exe",
+      "browser_download_url": "https://github.com/Rajesh4027/Sri_Venkateswara_Steels/releases/download/v2.8.2/Sri.Venkateswara.Steels.Setup.2.8.2.exe"
+    }
+  ]
+}
