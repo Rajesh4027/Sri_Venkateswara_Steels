@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef, Fragment } from 'react';
 import LOGO from '../assets/logo.png';
 import OWNER_SIGN from '../assets/Owner Signature.jpeg';
-import { fmt, inr, dt, amountInWords, DEFAULT_UOMS_LIST, formatCustomerName, getMaterialDisplayName, inferTamilName, getLocalTodayYmd } from '../utils';
+import { fmt, inr, dt, amountInWords, DEFAULT_UOMS_LIST, formatCustomerName, formatTitleCase, getMaterialDisplayName, inferTamilName, getLocalTodayYmd } from '../utils';
 import Ic from '../components/Icon';
 import { IssueMaterialCombobox } from '../components/MaterialCombobox';
 import CustomerAutofillInput from '../components/CustomerCombobox';
@@ -1200,7 +1200,16 @@ export default function IssueBill({ items, bills, setBills, setItems, preset, to
                   value={h.address || ''}
                   onChange={e => {
                     setView(null);
-                    setH(prev => ({ ...prev, address: e.target.value }));
+                    const val = e.nativeEvent?.isComposing ? e.target.value : formatTitleCase(e.target.value);
+                    setH(prev => ({ ...prev, address: val }));
+                  }}
+                  onCompositionEnd={e => {
+                    setH(prev => ({ ...prev, address: formatTitleCase(e.target.value) }));
+                  }}
+                  onBlur={e => {
+                    if (h.address) {
+                      setH(prev => ({ ...prev, address: formatTitleCase(h.address.trim()) }));
+                    }
                   }}
                   style={{ height: 38, fontSize: 13, fontWeight: 500, width: '100%', boxSizing: 'border-box', paddingRight: h.address ? 28 : 12 }}
                 />
@@ -1247,19 +1256,16 @@ export default function IssueBill({ items, bills, setBills, setItems, preset, to
                   value={h.veh || ''}
                   onChange={e => {
                     setView(null);
+                    if (e.nativeEvent?.isComposing) {
+                      setH(prev => ({ ...prev, veh: e.target.value }));
+                      return;
+                    }
                     const cleaned = e.target.value.replace(/[^a-zA-Z0-9\s-]/g, '').toUpperCase();
                     setH(prev => ({ ...prev, veh: cleaned }));
                   }}
-                  onKeyDown={e => {
-                    if (
-                      ['Backspace', 'Delete', 'Tab', 'Escape', 'Enter', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key) ||
-                      e.ctrlKey || e.metaKey
-                    ) {
-                      return;
-                    }
-                    if (!/^[a-zA-Z0-9\s-]$/.test(e.key)) {
-                      e.preventDefault();
-                    }
+                  onCompositionEnd={e => {
+                    const cleaned = e.target.value.replace(/[^a-zA-Z0-9\s-]/g, '').toUpperCase();
+                    setH(prev => ({ ...prev, veh: cleaned }));
                   }}
                   onBlur={e => {
                     const val = (e.target.value || '').trim().replace(/[^A-Z0-9\s-]/g, '').toUpperCase();

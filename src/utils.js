@@ -5,12 +5,13 @@ export const inr = n => '₹' + fmt(n);
 export const dt = s => s ? new Date(s).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
 export const KEY = 'svs-steels-clean-v2';
 
-export const formatCustomerName = str => {
+export const formatTitleCase = str => {
   if (!str) return '';
   return String(str).replace(/\b([a-zA-Z])([a-zA-Z]*)/g, (_, first, rest) => {
     return first.toUpperCase() + rest.toLowerCase();
   });
 };
+export const formatCustomerName = formatTitleCase;
 
 export const DEFAULT_CATEGORIES_LIST = [
   'Steel',

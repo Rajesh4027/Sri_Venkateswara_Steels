@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import Ic from '../components/Icon';
 import { InwardMaterialCombobox, InwardTamilMaterialInput } from '../components/MaterialCombobox';
-import { fmt, inr, getSupplierMaterials, getMaterialDisplayName, inferTamilName, DEFAULT_CATEGORIES_LIST, DEFAULT_UOMS_LIST } from '../utils';
+import { fmt, inr, getSupplierMaterials, getMaterialDisplayName, inferTamilName, formatTitleCase, DEFAULT_CATEGORIES_LIST, DEFAULT_UOMS_LIST } from '../utils';
 import { COMMON_HSN_CODES, COMMON_UOMS } from '../data/categories';
 import { useTranslation } from '../context/LanguageContext';
 
@@ -624,7 +624,16 @@ export default function InwardEntryPage({
               list="inward-page-suppliers"
               placeholder="e.g. Palaniappa Thirupathi, Surya"
               value={supplier}
-              onChange={e => setSupplier(e.target.value)}
+              onChange={e => {
+                const val = e.nativeEvent?.isComposing ? e.target.value : formatTitleCase(e.target.value);
+                setSupplier(val);
+              }}
+              onCompositionEnd={e => {
+                setSupplier(formatTitleCase(e.target.value));
+              }}
+              onBlur={e => {
+                setSupplier(formatTitleCase(e.target.value.trim()));
+              }}
               style={{ fontWeight: 700 }}
             />
             <datalist id="inward-page-suppliers">

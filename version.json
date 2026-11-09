@@ -1,14 +1,14 @@
 {
-  "version": "2.8.4",
-  "tag_name": "v2.8.4",
-  "name": "Sri Venkateswara Steels ERP v2.8.4",
-  "notes": "Official Release v2.8.4: Perfectly aligned material dropdown positioned directly 4px beneath the Material To Issue input box without overlapping, strict search filters, bilingual auto-fill, and clean release distribution package.",
-  "published_at": "2026-11-09T05:00:00Z",
-  "setupUrl": "https://github.com/Rajesh4027/Sri_Venkateswara_Steels/releases/download/v2.8.4/Sri.Venkateswara.Steels.Setup.2.8.4.exe",
+  "version": "2.8.5",
+  "tag_name": "v2.8.5",
+  "name": "Sri Venkateswara Steels ERP v2.8.5",
+  "notes": "Official Release v2.8.5: Fixed Vehicle Number keyboard duplicate character bug under Tamil/Tamil Phonetic IME, auto Title Case capitalization for Customer Name, To Address, Supplier Name, and Material Description, independent internal table scrolling for Stock & Inventory, and clean release distribution package.",
+  "published_at": "2026-11-09T07:20:00Z",
+  "setupUrl": "https://github.com/Rajesh4027/Sri_Venkateswara_Steels/releases/download/v2.8.5/Sri.Venkateswara.Steels.Setup.2.8.5.exe",
   "assets": [
     {
-      "name": "Sri.Venkateswara.Steels.Setup.2.8.4.exe",
-      "browser_download_url": "https://github.com/Rajesh4027/Sri_Venkateswara_Steels/releases/download/v2.8.4/Sri.Venkateswara.Steels.Setup.2.8.4.exe"
+      "name": "Sri.Venkateswara.Steels.Setup.2.8.5.exe",
+      "browser_download_url": "https://github.com/Rajesh4027/Sri_Venkateswara_Steels/releases/download/v2.8.5/Sri.Venkateswara.Steels.Setup.2.8.5.exe"
     }
   ]
 }

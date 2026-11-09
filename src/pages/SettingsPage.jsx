@@ -4,7 +4,7 @@ import LOGO from '../assets/logo.png';
 import { inr, fmt, KEY, getLocalTodayYmd } from '../utils';
 import { useLanguage } from '../context/LanguageContext';
 
-const CURRENT_APP_VERSION = 'v2.8.4';
+const CURRENT_APP_VERSION = 'v2.8.5';
 const GITHUB_REPO = 'Rajesh4027/Sri_Venkateswara_Steels';
 
 function parseSemVer(v) {
@@ -136,7 +136,7 @@ export default function SettingsPage({
   const handleExportJsonBackup = async () => {
     const backupData = {
       app: 'Sri Venkateswara Steels ERP',
-      version: form.appVersion || 'v2.8.4',
+      version: form.appVersion || 'v2.8.5',
       exportedAt: new Date().toISOString(),
       summary: {
         totalStockItems: items.length,

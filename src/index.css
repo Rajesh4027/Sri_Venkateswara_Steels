@@ -2118,8 +2118,18 @@ select.with-prefix {
   display: flex;
   flex-direction: column;
   flex: 1;
-  min-height: calc(var(--app-vh, 100vh) - 48px);
-  height: 100%;
+  height: calc(var(--app-vh, 100vh) - 44px);
+  max-height: calc(var(--app-vh, 100vh) - 44px);
+  min-height: 0;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+@media (max-width: 860px) {
+  .stock-page-container {
+    height: calc(var(--app-vh, 100vh) - 100px);
+    max-height: calc(var(--app-vh, 100vh) - 100px);
+  }
 }
 
 .stock-table-card {
@@ -2139,6 +2149,33 @@ select.with-prefix {
   overflow-y: auto;
   flex: 1;
   min-height: 0;
+  scroll-behavior: smooth;
+}
+
+.stock-table-scroll th {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--steelbg);
+  box-shadow: 0 1px 0 var(--line);
+}
+
+.stock-table-scroll::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+.stock-table-scroll::-webkit-scrollbar-track {
+  background: #F8FAFC;
+}
+
+.stock-table-scroll::-webkit-scrollbar-thumb {
+  background: #CBD5E1;
+  border-radius: 4px;
+}
+
+.stock-table-scroll::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8;
 }
 
 .stock-pagination-bar {

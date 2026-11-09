@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import Modal from './Modal';
 import Ic from './Icon';
 import { InwardMaterialCombobox, InwardTamilMaterialInput } from './MaterialCombobox';
-import { fmt, inr, getSupplierMaterials, DEFAULT_CATEGORIES_LIST, DEFAULT_UOMS_LIST, inferTamilName, getMaterialDisplayName } from '../utils';
+import { fmt, inr, getSupplierMaterials, DEFAULT_CATEGORIES_LIST, DEFAULT_UOMS_LIST, inferTamilName, getMaterialDisplayName, formatTitleCase } from '../utils';
 import { COMMON_HSN_CODES, COMMON_UOMS } from '../data/categories';
 import { useLanguage } from '../context/LanguageContext';
 
@@ -305,7 +305,16 @@ export default function InwardEntryModal({
                 list="supplier-suggestions"
                 placeholder="Type or select supplier"
                 value={supplier}
-                onChange={e => setSupplier(e.target.value)}
+                onChange={e => {
+                  const val = e.nativeEvent?.isComposing ? e.target.value : formatTitleCase(e.target.value);
+                  setSupplier(val);
+                }}
+                onCompositionEnd={e => {
+                  setSupplier(formatTitleCase(e.target.value));
+                }}
+                onBlur={e => {
+                  setSupplier(formatTitleCase(e.target.value.trim()));
+                }}
               />
               <datalist id="supplier-suggestions">
                 {pastSuppliers.map(s => <option key={s} value={s} />)}

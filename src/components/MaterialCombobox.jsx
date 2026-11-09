@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import Ic from './Icon';
-import { fmt, getMaterialDisplayName, inferTamilName, inferEnglishName, getAppZoomFactor } from '../utils';
+import { fmt, getMaterialDisplayName, inferTamilName, inferEnglishName, formatTitleCase, getAppZoomFactor } from '../utils';
 import { useTranslation } from '../context/LanguageContext';
 
 /**
@@ -146,9 +146,10 @@ export function InwardMaterialCombobox({
     return () => document.removeEventListener('mousedown', handleDocClick);
   }, [isOpen]);
 
-  const processQueryInput = val => {
-    setQuery(val);
-    const trimmed = val.trim();
+  const processQueryInput = (val, isComposing = false) => {
+    const formattedVal = isComposing ? val : formatTitleCase(val);
+    setQuery(formattedVal);
+    const trimmed = formattedVal.trim();
 
     // If input is emptied/cleared by user, call onClear to empty HSN, rate, etc.
     if (!trimmed) {
@@ -188,7 +189,7 @@ export function InwardMaterialCombobox({
   };
 
   const handleInputChange = e => {
-    processQueryInput(e.target.value);
+    processQueryInput(e.target.value, !!e.nativeEvent?.isComposing);
   };
 
   // Keyboard navigation
@@ -286,7 +287,17 @@ export function InwardMaterialCombobox({
               }
             }
           }}
+          onCompositionEnd={e => {
+            processQueryInput(e.target.value, false);
+          }}
           onBlur={() => {
+            if (query.trim()) {
+              const formatted = formatTitleCase(query.trim());
+              if (formatted !== query) {
+                setQuery(formatted);
+                if (!row.id) onAddNew(formatted);
+              }
+            }
             setTimeout(() => setIsOpen(false), 200);
           }}
           onKeyDown={handleKeyDown}

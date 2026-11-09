@@ -158,6 +158,8 @@ export default function CustomerAutofillInput({
     if (field === 'phone') {
       // Allow only numbers (0-9)
       val = val.replace(/[^0-9]/g, '').slice(0, 15);
+    } else if (field === 'cust' && !e.nativeEvent?.isComposing) {
+      val = formatCustomerName(val);
     }
     onChange(val);
 
@@ -264,8 +266,19 @@ export default function CustomerAutofillInput({
             }
             setTimeout(() => setIsOpen(false), 200);
           }}
+          onCompositionEnd={e => {
+            if (field === 'cust') {
+              const formatted = formatCustomerName(e.target.value);
+              if (formatted !== e.target.value) {
+                onChange(formatted);
+              }
+            }
+          }}
           onKeyDown={e => {
             if (field === 'phone') {
+              if (e.isComposing || e.nativeEvent?.isComposing || e.keyCode === 229 || e.key === 'Process') {
+                return;
+              }
               if (
                 ['Backspace', 'Delete', 'Tab', 'Escape', 'Enter', 'ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key) ||
                 e.ctrlKey || e.metaKey
