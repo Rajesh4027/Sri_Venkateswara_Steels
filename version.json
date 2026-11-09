@@ -1,18 +1,14 @@
 {
-  "version": "2.8.3",
-  "tag_name": "v2.8.3",
-  "name": "Sri Venkateswara Steels ERP v2.8.3",
-  "notes": "Official Release v2.8.3: Perfectly aligned dropdown directly near inputs without clipping, clean 3-part layout (Left: Stock Name, Center: Stock in Hand, Right: Amount/Rate with SVS & HSN removed), auto-suppression of dropdown when material is already selected, numbers-only phone input, uppercase alphanumeric vehicle input, bilingual Tamil/English auto-fill, and cancel button full row reset.",
-  "published_at": "2026-11-09T03:00:00Z",
-  "setupUrl": "https://github.com/Rajesh4027/Sri_Venkateswara_Steels/releases/download/v2.8.3/Sri.Venkateswara.Steels.Setup.2.8.3.exe",
+  "version": "2.8.4",
+  "tag_name": "v2.8.4",
+  "name": "Sri Venkateswara Steels ERP v2.8.4",
+  "notes": "Official Release v2.8.4: Perfectly aligned material dropdown positioned directly 4px beneath the Material To Issue input box without overlapping, strict search filters, bilingual auto-fill, and clean release distribution package.",
+  "published_at": "2026-11-09T05:00:00Z",
+  "setupUrl": "https://github.com/Rajesh4027/Sri_Venkateswara_Steels/releases/download/v2.8.4/Sri.Venkateswara.Steels.Setup.2.8.4.exe",
   "assets": [
     {
-      "name": "Sri.Venkateswara.Steels.Setup.2.8.3.exe",
-      "browser_download_url": "https://github.com/Rajesh4027/Sri_Venkateswara_Steels/releases/download/v2.8.3/Sri.Venkateswara.Steels.Setup.2.8.3.exe"
-    },
-    {
-      "name": "Sri Venkateswara Steels Setup 2.8.3.exe",
-      "browser_download_url": "https://github.com/Rajesh4027/Sri_Venkateswara_Steels/releases/download/v2.8.3/Sri.Venkateswara.Steels.Setup.2.8.3.exe"
+      "name": "Sri.Venkateswara.Steels.Setup.2.8.4.exe",
+      "browser_download_url": "https://github.com/Rajesh4027/Sri_Venkateswara_Steels/releases/download/v2.8.4/Sri.Venkateswara.Steels.Setup.2.8.4.exe"
     }
   ]
 }

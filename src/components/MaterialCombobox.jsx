@@ -68,7 +68,7 @@ export function InwardMaterialCombobox({
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState(row.name || '');
   const [activeIndex, setActiveIndex] = useState(0);
-  const [coords, setCoords] = useState({ top: 0, left: 0, width: 340, maxHeight: 260 });
+  const [coords, setCoords] = useState({ top: -9999, left: -9999, width: 340, maxHeight: 260 });
 
   const inputRef = useRef(null);
   const listRef = useRef(null);
@@ -86,30 +86,25 @@ export function InwardMaterialCombobox({
     return filterInwardMatches(query, items);
   }, [query, items]);
 
-  // Reposition floating dropdown dynamically with viewport collision detection and zoom factor compensation
+  // Reposition floating dropdown dynamically with viewport collision detection
   const updatePosition = () => {
     if (!inputRef.current) return;
     const rect = inputRef.current.getBoundingClientRect();
-    const z = getAppZoomFactor();
-
     const spaceBelow = window.innerHeight - rect.bottom;
     const spaceAbove = rect.top;
-    // Prefer opening downward directly under input; only open upward if space below is very small (< 140px)
-    const openUpward = spaceBelow < 140 && spaceAbove > spaceBelow;
+    // Prefer opening downward directly under input; only open upward if space below is very small (< 100px)
+    const openUpward = spaceBelow < 100 && spaceAbove > spaceBelow;
     const availableSpace = openUpward ? spaceAbove - 12 : spaceBelow - 12;
     const maxHeight = Math.max(120, Math.min(260, availableSpace));
     const width = Math.max(rect.width, 420);
-    let visualLeft = rect.left;
-    if (visualLeft + width > window.innerWidth - 12) {
-      visualLeft = Math.max(8, window.innerWidth - width - 12);
-    }
+    const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 12));
 
     setCoords({
-      top: openUpward ? 'auto' : (rect.bottom + 4) / z,
-      bottom: openUpward ? (window.innerHeight - rect.top + 4) / z : 'auto',
-      left: visualLeft / z,
-      width: width / z,
-      maxHeight: maxHeight / z,
+      top: openUpward ? 'auto' : rect.bottom + 4,
+      bottom: openUpward ? (window.innerHeight - rect.top + 4) : 'auto',
+      left,
+      width,
+      maxHeight,
       openUpward
     });
   };
@@ -485,7 +480,7 @@ export function InwardTamilMaterialInput({
   const [isOpen, setIsOpen] = useState(false);
   const [query, setQuery] = useState(row.nameTa || '');
   const [activeIndex, setActiveIndex] = useState(0);
-  const [coords, setCoords] = useState({ top: 0, left: 0, width: 340 });
+  const [coords, setCoords] = useState({ top: -9999, left: -9999, width: 340, maxHeight: 260 });
 
   const inputRef = useRef(null);
   const listRef = useRef(null);
@@ -506,26 +501,21 @@ export function InwardTamilMaterialInput({
   const updatePosition = () => {
     if (!inputRef.current) return;
     const rect = inputRef.current.getBoundingClientRect();
-    const z = getAppZoomFactor();
-
     const spaceBelow = window.innerHeight - rect.bottom;
     const spaceAbove = rect.top;
-    // Prefer opening downward directly under input; only open upward if space below is very small (< 140px)
-    const openUpward = spaceBelow < 140 && spaceAbove > spaceBelow;
+    // Prefer opening downward directly under input; only open upward if space below is very small (< 100px)
+    const openUpward = spaceBelow < 100 && spaceAbove > spaceBelow;
     const availableSpace = openUpward ? spaceAbove - 12 : spaceBelow - 12;
     const maxHeight = Math.max(120, Math.min(260, availableSpace));
     const width = Math.max(rect.width, 420);
-    let visualLeft = rect.left;
-    if (visualLeft + width > window.innerWidth - 12) {
-      visualLeft = Math.max(8, window.innerWidth - width - 12);
-    }
+    const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 12));
 
     setCoords({
-      top: openUpward ? 'auto' : (rect.bottom + 4) / z,
-      bottom: openUpward ? (window.innerHeight - rect.top + 4) / z : 'auto',
-      left: visualLeft / z,
-      width: width / z,
-      maxHeight: maxHeight / z,
+      top: openUpward ? 'auto' : rect.bottom + 4,
+      bottom: openUpward ? (window.innerHeight - rect.top + 4) : 'auto',
+      left,
+      width,
+      maxHeight,
       openUpward
     });
   };
@@ -854,7 +844,7 @@ export function IssueMaterialCombobox({
   placeholder = "Type to search stock materials or HSN..."
 }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [coords, setCoords] = useState({ top: 0, left: 0, width: 440 });
+  const [coords, setCoords] = useState({ top: -9999, left: -9999, width: 440 });
   const [activeIndex, setActiveIndex] = useState(0);
   const { lang } = useTranslation();
   const selectedItem = useMemo(() => items.find(i => i.id === selectedId), [items, selectedId]);
@@ -904,29 +894,24 @@ export function IssueMaterialCombobox({
     });
   }, [query, items]);
 
-  // Dynamically position dropdown with viewport boundary & collision detection and zoom factor compensation
+  // Dynamically position dropdown with viewport boundary & collision detection
   const updatePosition = () => {
     if (!inputRef.current) return;
     const rect = inputRef.current.getBoundingClientRect();
-    const z = getAppZoomFactor();
-
     const spaceBelow = window.innerHeight - rect.bottom;
     const spaceAbove = rect.top;
-    const openUpward = spaceBelow < 140 && spaceAbove > spaceBelow;
+    const openUpward = spaceBelow < 120 && spaceAbove > spaceBelow;
     const availableSpace = openUpward ? spaceAbove - 12 : spaceBelow - 12;
     const maxHeight = Math.max(120, Math.min(280, availableSpace));
     const width = Math.max(rect.width, 460);
-    let visualLeft = rect.left;
-    if (visualLeft + width > window.innerWidth - 12) {
-      visualLeft = Math.max(8, window.innerWidth - width - 12);
-    }
+    const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 12));
 
     setCoords({
-      top: openUpward ? 'auto' : (rect.bottom + 4) / z,
-      bottom: openUpward ? (window.innerHeight - rect.top + 4) / z : 'auto',
-      left: visualLeft / z,
-      width: width / z,
-      maxHeight: maxHeight / z,
+      top: openUpward ? 'auto' : rect.bottom + 4,
+      bottom: openUpward ? (window.innerHeight - rect.top + 4) : 'auto',
+      left,
+      width,
+      maxHeight,
       openUpward
     });
   };
@@ -1051,52 +1036,52 @@ export function IssueMaterialCombobox({
 
       // STRICT CHECK: User typed something new that does NOT match stock!
       if (toast) {
-        toast("❌ Only existing stock materials can be issued. New products cannot be added here.");
+          toast("❌ Only existing stock materials can be issued. New products cannot be added here.");
+        }
+        if (selectedItem) {
+          setQuery(getMaterialDisplayName(selectedItem, lang));
+        } else {
+          setQuery('');
+        }
+        setIsOpen(false);
+      } else if (e.key === 'Tab') {
+        setIsOpen(false);
+        if (selectedItem) {
+          setQuery(getMaterialDisplayName(selectedItem, lang));
+        } else {
+          setQuery('');
+        }
+      } else if (e.key === 'Escape') {
+        setIsOpen(false);
+        if (selectedItem) setQuery(getMaterialDisplayName(selectedItem, lang));
+        else setQuery('');
       }
-      if (selectedItem) {
-        setQuery(getMaterialDisplayName(selectedItem, lang));
-      } else {
-        setQuery('');
-      }
-      setIsOpen(false);
-    } else if (e.key === 'Tab') {
-      setIsOpen(false);
-      if (selectedItem) {
-        setQuery(getMaterialDisplayName(selectedItem, lang));
-      } else {
-        setQuery('');
-      }
-    } else if (e.key === 'Escape') {
-      setIsOpen(false);
-      if (selectedItem) setQuery(getMaterialDisplayName(selectedItem, lang));
-      else setQuery('');
-    }
-  };
+    };
 
-  const handlePick = item => {
-    if (Number(item.stock || 0) <= 0) {
-      if (toast) {
-        toast(`⚠️ Cannot pick: "${getMaterialDisplayName(item, lang)}" is currently Out of Stock (0 ${item.uom || 'units'} available).`);
+    const handlePick = item => {
+      if (Number(item.stock || 0) <= 0) {
+        if (toast) {
+          toast(`⚠️ Cannot pick: "${getMaterialDisplayName(item, lang)}" is currently Out of Stock (0 ${item.uom || 'units'} available).`);
+        }
+        return;
       }
-      return;
-    }
-    onSelect(item);
-    setQuery(getMaterialDisplayName(item, lang));
-    setIsOpen(false);
-  };
+      onSelect(item);
+      setQuery(getMaterialDisplayName(item, lang));
+      setIsOpen(false);
+    };
 
-  const handleClear = e => {
-    if (e) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-    setQuery('');
-    onSelect(null);
-    setIsOpen(false);
-  };
+    const handleClear = e => {
+      if (e) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+      setQuery('');
+      onSelect(null);
+      setIsOpen(false);
+    };
 
-  return (
-    <div ref={containerRef} className="combobox-container" style={{ position: 'relative', width: '100%' }}>
+    return (
+      <div ref={containerRef} className="combobox-container" style={{ position: 'relative', width: '100%' }}>
       <div className="combobox-input-wrap" style={{ position: 'relative', display: 'flex', alignItems: 'center', width: '100%' }}>
         <input
           id={id}
@@ -1165,24 +1150,26 @@ export function IssueMaterialCombobox({
         </div>
       </div>
 
-      {/* Floating Dropdown directly below or above the input box via portal */}
-      {isOpen && query.trim().length > 0 && createPortal(
+      {/* Floating Suggestions Dropdown directly beneath the input */}
+      {isOpen && query.trim().length > 0 && (
         <div
           ref={listRef}
           className="combobox-dropdown"
           style={{
-            position: 'fixed',
-            top: coords.top,
-            bottom: coords.bottom,
-            left: coords.left,
-            width: coords.width,
-            maxHeight: coords.maxHeight || 280,
+            position: 'absolute',
+            top: 'calc(100% + 4px)',
+            left: 0,
+            width: '100%',
+            minWidth: 460,
+            maxWidth: 'min(580px, 95vw)',
+            maxHeight: 280,
             overflowY: 'auto',
             background: '#FFFFFF',
             border: '1.5px solid rgba(15, 23, 42, 0.18)',
             borderRadius: 12,
             boxShadow: '0 16px 38px -6px rgba(0, 31, 63, 0.28), 0 6px 16px rgba(0,0,0,0.1)',
-            zIndex: 9999999
+            zIndex: 999999,
+            boxSizing: 'border-box'
           }}
         >
           {/* Header: ONE ROW, THREE COLUMNS */}
@@ -1302,8 +1289,7 @@ export function IssueMaterialCombobox({
               );
             })
           )}
-        </div>,
-        document.body
+        </div>
       )}
     </div>
   );
