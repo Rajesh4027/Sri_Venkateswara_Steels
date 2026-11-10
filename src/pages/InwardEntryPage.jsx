@@ -212,20 +212,7 @@ export default function InwardEntryPage({
     reader.onload = async evt => {
       const dataUrl = evt.target.result;
       setBillImage(dataUrl);
-      if (window.electronAPI?.saveSingleImage) {
-        try {
-          await window.electronAPI.saveSingleImage({
-            dataUrl,
-            invoiceNo: invNo.trim() || 'Draft',
-            invoiceDate: invDate || ''
-          });
-          toast('✓ Bill photo saved to local disk & attached');
-        } catch (err) {
-          toast('Bill image uploaded successfully');
-        }
-      } else {
-        toast('Bill image uploaded successfully');
-      }
+      toast('✓ Bill photo attached');
     };
     reader.readAsDataURL(file);
   };

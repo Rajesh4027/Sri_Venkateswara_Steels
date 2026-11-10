@@ -4,7 +4,7 @@ import LOGO from '../assets/logo.png';
 import { inr, fmt, KEY, getLocalTodayYmd } from '../utils';
 import { useLanguage } from '../context/LanguageContext';
 
-const CURRENT_APP_VERSION = 'v2.8.7';
+const CURRENT_APP_VERSION = 'v2.8.8';
 const GITHUB_REPO = 'Rajesh4027/Sri_Venkateswara_Steels';
 
 function parseSemVer(v) {

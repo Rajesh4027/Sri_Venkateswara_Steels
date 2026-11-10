@@ -19,6 +19,22 @@ function getImagesDirectory() {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
+  // Automatically convert any previous Invoice_<no>_<date> files to clean <no>_<date> format
+  try {
+    const files = fs.readdirSync(dir);
+    files.forEach(f => {
+      if (f.startsWith('Invoice_')) {
+        const newName = f.replace(/^Invoice_/, '');
+        const oldPath = path.join(dir, f);
+        const newPath = path.join(dir, newName);
+        if (!fs.existsSync(newPath)) {
+          fs.renameSync(oldPath, newPath);
+        } else {
+          try { fs.unlinkSync(oldPath); } catch (e) {}
+        }
+      }
+    });
+  } catch (e) {}
   return dir;
 }
 
@@ -79,7 +95,7 @@ ipcMain.handle('save-single-image', async (event, payload) => {
     const ext = mimeType.includes('png') ? 'png' : (mimeType.includes('webp') ? 'webp' : 'jpg');
     const safeInv = String(invoiceNo || 'INV').replace(/[^a-zA-Z0-9_-]/g, '_');
     const safeDate = formatToDdMmYyyy(invoiceDate);
-    const cleanName = safeDate ? `Invoice_${safeInv}_${safeDate}.${ext}` : `Invoice_${safeInv}.${ext}`;
+    const cleanName = safeDate ? `${safeInv}_${safeDate}.${ext}` : `${safeInv}.${ext}`;
     const filePath = path.join(dir, cleanName);
     fs.writeFileSync(filePath, Buffer.from(matches[2], 'base64'));
     return { success: true, filePath, filename: cleanName, imagesDir: dir };
@@ -101,7 +117,7 @@ ipcMain.handle('sync-all-images', async (event, invoices = []) => {
             const ext = mimeType.includes('png') ? 'png' : 'jpg';
             const safeInv = String(inv.inv || inv.id || 'INV').replace(/[^a-zA-Z0-9_-]/g, '_');
             const safeDate = formatToDdMmYyyy(inv.date);
-            const filename = safeDate ? `Invoice_${safeInv}_${safeDate}.${ext}` : `Invoice_${safeInv}.${ext}`;
+            const filename = safeDate ? `${safeInv}_${safeDate}.${ext}` : `${safeInv}.${ext}`;
             const filePath = path.join(dir, filename);
             fs.writeFileSync(filePath, Buffer.from(matches[2], 'base64'));
             savedCount++;
