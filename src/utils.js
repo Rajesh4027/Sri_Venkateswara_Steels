@@ -804,7 +804,7 @@ export async function downloadInvoiceHtml(bill, settings = {}, items = [], lang 
     flex-direction: column;
     justify-content: space-between;
     background: #FFFFFF;
-    padding: 14mm 16mm;
+    padding: 8mm 10mm;
     box-shadow: 0 10px 35px rgba(0, 0, 0, 0.35);
     border-radius: 4px;
     margin: 0 auto;
@@ -821,11 +821,11 @@ export async function downloadInvoiceHtml(bill, settings = {}, items = [], lang 
     border-top: 1.5px solid #E2E8F0;
   }
 
-  /* Print and PDF output: Generous padding on all four sides of A4 paper */
+  /* Print and PDF output: Clean proportional A4 layout with minimal margins */
   @media print {
     @page {
       size: A4 portrait;
-      margin: 10mm 12mm;
+      margin: 5mm 6mm;
     }
     html, body {
       background: #FFFFFF !important;
@@ -839,10 +839,10 @@ export async function downloadInvoiceHtml(bill, settings = {}, items = [], lang 
     .inv-page-layout {
       width: 100% !important;
       max-width: 100% !important;
-      min-height: 268mm !important;
-      height: 268mm !important;
+      min-height: 280mm !important;
+      height: 280mm !important;
       box-sizing: border-box !important;
-      padding: 4mm 6mm !important;
+      padding: 2mm 3mm !important;
       margin: 0 !important;
       box-shadow: none !important;
       border: none !important;

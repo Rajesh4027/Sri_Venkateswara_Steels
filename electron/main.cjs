@@ -50,6 +50,20 @@ ipcMain.handle('open-images-folder', async () => {
   return { success: true, path: dir };
 });
 
+function formatToDdMmYyyy(dateStr) {
+  if (!dateStr) return '';
+  const s = String(dateStr).trim();
+  if (/^\d{2}-\d{2}-\d{4}$/.test(s)) return s;
+  const m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (m) {
+    const yyyy = m[1];
+    const mm = m[2].padStart(2, '0');
+    const dd = m[3].padStart(2, '0');
+    return `${dd}-${mm}-${yyyy}`;
+  }
+  return s.replace(/[^a-zA-Z0-9_-]/g, '_');
+}
+
 ipcMain.handle('save-single-image', async (event, payload) => {
   try {
     const { dataUrl, filename, invoiceNo, invoiceDate } = payload || {};
@@ -64,7 +78,7 @@ ipcMain.handle('save-single-image', async (event, payload) => {
     const mimeType = matches[1];
     const ext = mimeType.includes('png') ? 'png' : (mimeType.includes('webp') ? 'webp' : 'jpg');
     const safeInv = String(invoiceNo || 'INV').replace(/[^a-zA-Z0-9_-]/g, '_');
-    const safeDate = String(invoiceDate || '').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const safeDate = formatToDdMmYyyy(invoiceDate);
     const cleanName = safeDate ? `Invoice_${safeInv}_${safeDate}.${ext}` : `Invoice_${safeInv}.${ext}`;
     const filePath = path.join(dir, cleanName);
     fs.writeFileSync(filePath, Buffer.from(matches[2], 'base64'));
@@ -86,7 +100,7 @@ ipcMain.handle('sync-all-images', async (event, invoices = []) => {
             const mimeType = matches[1];
             const ext = mimeType.includes('png') ? 'png' : 'jpg';
             const safeInv = String(inv.inv || inv.id || 'INV').replace(/[^a-zA-Z0-9_-]/g, '_');
-            const safeDate = String(inv.date || '').replace(/[^a-zA-Z0-9_-]/g, '_');
+            const safeDate = formatToDdMmYyyy(inv.date);
             const filename = safeDate ? `Invoice_${safeInv}_${safeDate}.${ext}` : `Invoice_${safeInv}.${ext}`;
             const filePath = path.join(dir, filename);
             fs.writeFileSync(filePath, Buffer.from(matches[2], 'base64'));
@@ -127,10 +141,10 @@ ipcMain.handle('generate-invoice-pdf', async (event, payload) => {
       pageSize: 'A4',
       printBackground: true,
       margins: {
-        top: 0.5,
-        bottom: 0.5,
-        left: 0.55,
-        right: 0.55
+        top: 0.15,
+        bottom: 0.15,
+        left: 0.2,
+        right: 0.2
       }
     });
 

@@ -1,14 +1,14 @@
 {
-  "version": "2.8.6",
-  "tag_name": "v2.8.6",
-  "name": "Sri Venkateswara Steels ERP v2.8.6",
-  "notes": "Official Release v2.8.6: Store contact phone number printed on invoice bills, native A4 invoice layout with standard margin padding, blank signature slot for physical signing, DD-MM-YYYY date format across inward supply & issue bill, dynamic Delivery History KPI stats recalculation, independent multi-item material rows in Excel exports with final totals, full bilingual Tamil translations, and preview modal data preservation.",
-  "published_at": "2026-11-10T15:00:00Z",
-  "setupUrl": "https://github.com/Rajesh4027/Sri_Venkateswara_Steels/releases/download/v2.8.6/Sri.Venkateswara.Steels.Setup.2.8.6.exe",
+  "version": "2.8.7",
+  "tag_name": "v2.8.7",
+  "name": "Sri Venkateswara Steels ERP v2.8.7",
+  "notes": "Official Release v2.8.7 for Sri Venkateswara Steels: - Fixed Material Search Priority: Typing 'nail' prioritizes exact prefix matches ('NAIL 11/2', 'NAIL 21/2') before substring matches ('GI NAILS'). - Bill Photo Filename Format: Saved bill images are now formatted with DD-MM-YYYY ('Invoice_<no>_<DD-MM-YYYY>.<ext>'). - Adjusted Invoice PDF Margins: Removed excess 4-side padding so printed and downloaded PDFs fill A4 paper cleanly without excessive whitespace. - Previous version superseded.",
+  "published_at": "2026-11-10T15:45:00Z",
+  "setupUrl": "https://github.com/Rajesh4027/Sri_Venkateswara_Steels/releases/download/v2.8.7/Sri.Venkateswara.Steels.Setup.2.8.7.exe",
   "assets": [
     {
-      "name": "Sri.Venkateswara.Steels.Setup.2.8.6.exe",
-      "browser_download_url": "https://github.com/Rajesh4027/Sri_Venkateswara_Steels/releases/download/v2.8.6/Sri.Venkateswara.Steels.Setup.2.8.6.exe"
+      "name": "Sri.Venkateswara.Steels.Setup.2.8.7.exe",
+      "browser_download_url": "https://github.com/Rajesh4027/Sri_Venkateswara_Steels/releases/download/v2.8.7/Sri.Venkateswara.Steels.Setup.2.8.7.exe"
     }
   ]
 }

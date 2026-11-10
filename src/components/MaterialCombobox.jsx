@@ -6,26 +6,70 @@ import { useTranslation } from '../context/LanguageContext';
 
 /**
  * Common filter helper for inward material searches (English and Tamil)
+ * Prioritizes relevant material matches:
+ * 1. Exact match (Rank 100)
+ * 2. Material name starts with query (Rank 90) -> e.g. "NAIL 11/2" for "nail"
+ * 3. Tamil name starts with query (Rank 85)
+ * 4. Inferred English name starts with query (Rank 80)
+ * 5. Word boundary match (Rank 60) -> e.g. "GI NAILS" for "nail"
+ * 6. Substring match (Rank 40)
+ * 7. Code or HSN match (Rank 20)
+ * Breaks ties with shorter name length first, then alphabetical.
  */
 function filterInwardMatches(query, items = []) {
   const q = (query || '').trim().toLowerCase();
   if (!q) return [];
   const inferredEn = inferEnglishName(q).toLowerCase();
-  return items.filter(it => {
+  const cleanQ = q.replace(/[^a-z0-9]/gi, '');
+
+  const matches = [];
+  for (const it of items) {
+    const n = (it.name || '').toLowerCase();
     const explicitTa = (it.nameTa || it.tamilName || '').toLowerCase();
     const inferredTa = inferTamilName(it.name || '').toLowerCase();
     const nTa = `${explicitTa} ${inferredTa}`.trim();
-    const n = (it.name || '').toLowerCase();
     const code = (it.id || '').toLowerCase();
-    const hsn = (it.hsn || '').toLowerCase();
-    return (
-      n.includes(q) ||
-      nTa.includes(q) ||
-      code.includes(q) ||
-      hsn.includes(q) ||
-      (inferredEn && n.includes(inferredEn))
-    );
+    const hsn = String(it.hsn || '').toLowerCase();
+    const cleanHsn = hsn.replace(/[^a-z0-9]/gi, '');
+
+    let score = 0;
+    if (n === q || explicitTa === q || inferredTa === q) {
+      score = 100;
+    } else if (n.startsWith(q)) {
+      score = 90;
+    } else if (explicitTa.startsWith(q) || inferredTa.startsWith(q)) {
+      score = 85;
+    } else if (inferredEn && n.startsWith(inferredEn)) {
+      score = 80;
+    } else if (new RegExp(`(?:^|[\\s\\-_/])${q.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}`, 'i').test(n)) {
+      score = 60;
+    } else if (new RegExp(`(?:^|[\\s\\-_/])${q.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&')}`, 'i').test(nTa)) {
+      score = 55;
+    } else if (n.includes(q)) {
+      score = 40;
+    } else if (nTa.includes(q)) {
+      score = 35;
+    } else if (inferredEn && n.includes(inferredEn)) {
+      score = 30;
+    } else if (code.startsWith(q) || hsn.startsWith(q)) {
+      score = 25;
+    } else if (code.includes(q) || hsn.includes(q) || (cleanQ && cleanHsn && cleanHsn.includes(cleanQ))) {
+      score = 20;
+    }
+
+    if (score > 0) {
+      matches.push({ it, score });
+    }
+  }
+
+  matches.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    const lenDiff = (a.it.name || '').length - (b.it.name || '').length;
+    if (lenDiff !== 0) return lenDiff;
+    return (a.it.name || '').localeCompare(b.it.name || '');
   });
+
+  return matches.map(m => m.it);
 }
 
 /**
@@ -877,32 +921,9 @@ export function IssueMaterialCombobox({
     }
   }, [itemDisplayName, isOpen]);
 
-  // Matching items based on query across all materials (including out of stock, matching English and Tamil)
+  // Matching items based on query across all materials (ranked prefix-first, matching English and Tamil)
   const matchingItems = useMemo(() => {
-    const q = (query || '').trim().toLowerCase();
-    if (!q) {
-      return [];
-    }
-    const cleanQ = q.replace(/[^a-z0-9]/gi, '');
-    const inferredEn = inferEnglishName(q).toLowerCase();
-    return items.filter(it => {
-      const explicitTa = (it.nameTa || it.tamilName || '').toLowerCase();
-      const inferredTa = inferTamilName(it.name || '').toLowerCase();
-      const nTa = `${explicitTa} ${inferredTa}`.trim();
-      const n = (it.name || '').toLowerCase();
-      const code = (it.id || '').toLowerCase();
-      const hsn = String(it.hsn || '').toLowerCase();
-      const cleanHsn = hsn.replace(/[^a-z0-9]/gi, '');
-
-      return (
-        n.includes(q) ||
-        nTa.includes(q) ||
-        code.includes(q) ||
-        hsn.includes(q) ||
-        (cleanQ && cleanHsn && cleanHsn.includes(cleanQ)) ||
-        (inferredEn && n.includes(inferredEn))
-      );
-    });
+    return filterInwardMatches(query, items);
   }, [query, items]);
 
   // Dynamically position dropdown with viewport boundary & collision detection
