@@ -1,7 +1,6 @@
 import { useState, useMemo, useEffect, useRef, Fragment } from 'react';
 import LOGO from '../assets/logo.png';
-import OWNER_SIGN from '../assets/Owner Signature.jpeg';
-import { fmt, inr, dt, amountInWords, DEFAULT_UOMS_LIST, formatCustomerName, formatTitleCase, getMaterialDisplayName, inferTamilName, getLocalTodayYmd } from '../utils';
+import { fmt, inr, dt, amountInWords, DEFAULT_UOMS_LIST, DEFAULT_SETTINGS, formatCustomerName, formatTitleCase, getMaterialDisplayName, inferTamilName, getLocalTodayYmd, downloadInvoiceHtml } from '../utils';
 import Ic from '../components/Icon';
 import { IssueMaterialCombobox } from '../components/MaterialCombobox';
 import CustomerAutofillInput from '../components/CustomerCombobox';
@@ -289,10 +288,12 @@ export default function IssueBill({ items, bills, setBills, setItems, preset, to
   };
 
   const handleCloseModal = () => {
+    const isPreview = view?.isPreview;
     setView(null);
     setCountdown(10);
     setIsAutoClosePaused(false);
-    if (editingBill && setEditingBill) {
+    // If it was just a preview, do NOT reset editing bill or wipe filled data
+    if (!isPreview && editingBill && setEditingBill) {
       setEditingBill(null);
       setH(blank);
       setLs([{ id: '', qty: 1, weight: '', weightUnit: 'KGS', uom: 'KGS', rate: 0, gst: 18 }]);
@@ -1077,7 +1078,12 @@ export default function IssueBill({ items, bills, setBills, setItems, preset, to
 
           {/* Col 2: Issue Date * */}
           <div className="control-group">
-            <label>{lang === 'ta' ? 'பில் தேதி *' : 'Issue Date *'}</label>
+            <label>
+              {lang === 'ta' ? 'பில் தேதி *' : 'Issue Date *'}{' '}
+              <span style={{ fontSize: 11, color: 'var(--mut)', fontWeight: 600 }}>
+                (DD-MM-YYYY: {dt(issueDate)})
+              </span>
+            </label>
             <div className="input-icon-wrap">
               <span className="input-prefix-icon"><Ic n="calendar" s={15} /></span>
               <input
@@ -2232,7 +2238,16 @@ export default function IssueBill({ items, bills, setBills, setItems, preset, to
                   onClick={() => window.print()}
                   style={{ gap: 5, background: 'var(--navy)', color: '#fff', borderColor: 'var(--navy)' }}
                 >
-                  <Ic n="print" s={14} /> Print Slip
+                  <Ic n="print" s={14} /> {lang === 'ta' ? 'பில் அச்சிடுக' : 'Print Slip'}
+                </button>
+                <button
+                  type="button"
+                  className="btn sm"
+                  onClick={() => downloadInvoiceHtml(view, settings, items, lang, toast)}
+                  style={{ gap: 5, background: '#ECFDF5', color: '#065F46', borderColor: '#A7F3D0', fontWeight: 700 }}
+                  title={lang === 'ta' ? 'பில் பதிவிறக்கம்' : 'Download Invoice'}
+                >
+                  <Ic n="download" s={14} /> {lang === 'ta' ? 'பதிவிறக்கு' : 'Download'}
                 </button>
                 <button
                   type="button"
@@ -2255,6 +2270,14 @@ export default function IssueBill({ items, bills, setBills, setItems, preset, to
                     {settings.address && (
                       <div style={{ fontSize: 11, color: 'var(--mut)', marginTop: 2, whiteSpace: 'pre-line', lineHeight: 1.35 }}>
                         {settings.address}
+                      </div>
+                    )}
+                    {(settings.phone || DEFAULT_SETTINGS?.phone) && (
+                      <div style={{ fontSize: 11, color: 'var(--mut)', marginTop: 2 }}>
+                        <b>{lang === 'ta' ? 'தொலைபேசி: ' : 'Phone: '}</b>
+                        <span style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif", color: 'var(--navy)', fontWeight: 600 }}>
+                          {settings.phone || DEFAULT_SETTINGS?.phone}
+                        </span>
                       </div>
                     )}
                     {settings.gstin && (
@@ -2293,7 +2316,7 @@ export default function IssueBill({ items, bills, setBills, setItems, preset, to
                   color: 'var(--navy)',
                   fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif"
                 }}>
-                  {settings.invoiceTitle || 'TAX INVOICE / BILL OF SUPPLY'}
+                  {settings.invoiceTitle || (lang === 'ta' ? 'வரி விலைப்பட்டியல் / விநியோக பில்' : 'TAX INVOICE / BILL OF SUPPLY')}
                 </div>
 
                 {/* Dispatch & Consignee Information Box */}
@@ -2308,30 +2331,30 @@ export default function IssueBill({ items, bills, setBills, setItems, preset, to
                   <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 12 }}>
                     <div>
                       <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', color: 'var(--mut)', letterSpacing: '.05em', display: 'block', marginBottom: 2 }}>
-                        Issued To / Consignee:
+                        {lang === 'ta' ? 'வாடிக்கையாளர் / பெறுநர்:' : 'Issued To / Consignee:'}
                       </span>
                       <div style={{ color: 'var(--navy)', fontSize: 13.5, fontWeight: 800 }}>
-                        {formatCustomerName(view.cust || h.cust) || 'Customer / Contractor / Site'}
+                        {formatCustomerName(view.cust || h.cust) || (lang === 'ta' ? 'வாடிக்கையாளர் / ஒப்பந்ததாரர்' : 'Customer / Contractor / Site')}
                       </div>
                       {(view.address || h.address) && (
                         <div style={{ color: 'var(--ink)', marginTop: 4, fontSize: 11.5, lineHeight: 1.35 }}>
-                          <b style={{ color: 'var(--mut)' }}>To Address: </b>
+                          <b style={{ color: 'var(--mut)' }}>{lang === 'ta' ? 'முகவரி: ' : 'To Address: '}</b>
                           {view.address || h.address}
                         </div>
                       )}
                       {(view.phone || h.phone) && (
                         <div style={{ color: 'var(--mut)', marginTop: 3, fontSize: 11.5 }}>
-                          <b>Phone:</b> {view.phone || h.phone}
+                          <b>{lang === 'ta' ? 'தொலைபேசி:' : 'Phone:'}</b> {view.phone || h.phone}
                         </div>
                       )}
                     </div>
 
                     <div style={{ borderLeft: '1px solid var(--line)', paddingLeft: 12 }}>
                       <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', color: 'var(--mut)', letterSpacing: '.05em', display: 'block', marginBottom: 2 }}>
-                        Dispatch Details:
+                        {lang === 'ta' ? 'டெஸ்பாட்ச் விவரங்கள்:' : 'Dispatch Details:'}
                       </span>
                       <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--navy)', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                        <span style={{ color: 'var(--mut)', fontWeight: 600 }}>Vehicle No:</span>
+                        <span style={{ color: 'var(--mut)', fontWeight: 600 }}>{lang === 'ta' ? 'வாகன எண்:' : 'Vehicle No:'}</span>
                         {(view.veh || h.veh) ? (
                           <span style={{
                             fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
@@ -2347,16 +2370,16 @@ export default function IssueBill({ items, bills, setBills, setItems, preset, to
                           </span>
                         ) : (
                           <span style={{ color: 'var(--mut)', fontStyle: 'italic', fontWeight: 500 }}>
-                            Not Specified
+                            {lang === 'ta' ? 'குறிப்பிடப்படவில்லை' : 'Not Specified'}
                           </span>
                         )}
                       </div>
                       <div style={{ color: 'var(--mut)', marginTop: 5, fontSize: 11.5 }}>
-                        <b>Payment:</b> {view.pay || h.pay || 'Cash'}
+                        <b>{lang === 'ta' ? 'கட்டண முறை:' : 'Payment:'}</b> {(view.pay || h.pay) === 'Cash' && lang === 'ta' ? 'ரொக்கம்' : (view.pay || h.pay || 'Cash')}
                       </div>
                       {(view.project || h.project) && (
                         <div style={{ color: 'var(--mut)', marginTop: 2, fontSize: 11.5 }}>
-                          <b>Site:</b> {view.project || h.project}
+                          <b>{lang === 'ta' ? 'தளம்:' : 'Site:'}</b> {view.project || h.project}
                         </div>
                       )}
                     </div>
@@ -2527,37 +2550,41 @@ export default function IssueBill({ items, bills, setBills, setItems, preset, to
                   {/* Left Column: Terms & Conditions */}
                   {settings.terms ? (
                     <div style={{ maxWidth: '58%', fontSize: 10, color: 'var(--mut)', lineHeight: 1.4 }}>
-                      <b style={{ color: 'var(--navy)', display: 'block', marginBottom: 2, fontSize: 10.5 }}>Terms &amp; Conditions:</b>
+                      <b style={{ color: 'var(--navy)', display: 'block', marginBottom: 2, fontSize: 10.5 }}>
+                        {lang === 'ta' ? 'விதிமுறைகள் & நிபந்தனைகள்:' : 'Terms & Conditions:'}
+                      </b>
                       <div style={{ whiteSpace: 'pre-line' }}>{settings.terms}</div>
                     </div>
                   ) : (
                     <div style={{ maxWidth: '58%', fontSize: 10, color: 'var(--mut)', lineHeight: 1.4 }}>
-                      <b style={{ color: 'var(--navy)', display: 'block', marginBottom: 2, fontSize: 10.5 }}>Terms &amp; Conditions:</b>
-                      <div>1. Goods once dispatched will not be taken back.</div>
-                      <div>2. Interest @ 18% p.a. will be levied on delayed payments.</div>
-                      <div>3. Weight verified at yard weighbridge is final.</div>
-                      <div>4. Subject to Theni jurisdiction only.</div>
+                      <b style={{ color: 'var(--navy)', display: 'block', marginBottom: 2, fontSize: 10.5 }}>
+                        {lang === 'ta' ? 'விதிமுறைகள் & நிபந்தனைகள்:' : 'Terms & Conditions:'}
+                      </b>
+                      {lang === 'ta' ? (
+                        <>
+                          <div>1. அனுப்பப்பட்ட பொருட்கள் திரும்பப் பெறப்பட மாட்டாது.</div>
+                          <div>2. தாமதமான கொடுப்பனவுகளுக்கு ஆண்டுக்கு 18% வட்டி விதிக்கப்படும்.</div>
+                          <div>3. யார்டு எடைமேடையில் சரிபார்க்கப்பட்ட எடையே இறுதியானது.</div>
+                          <div>4. தேனி நீதிமன்ற எல்லைக்கு உட்பட்டது.</div>
+                        </>
+                      ) : (
+                        <>
+                          <div>1. Goods once dispatched will not be taken back.</div>
+                          <div>2. Interest @ 18% p.a. will be levied on delayed payments.</div>
+                          <div>3. Weight verified at yard weighbridge is final.</div>
+                          <div>4. Subject to Theni jurisdiction only.</div>
+                        </>
+                      )}
                     </div>
                   )}
 
-                  {/* Right Column: Owner Signature for Sri Venkateswara Steels */}
+                  {/* Right Column: Owner Signature for Sri Venkateswara Steels (Empty for manual signing) */}
                   <div style={{ textAlign: 'right', minWidth: 200, flexShrink: 0 }}>
                     <div style={{ fontSize: 11.5, fontWeight: 800, color: 'var(--navy)', letterSpacing: '.02em' }}>
-                      For {settings.storeName || 'SRI VENKATESWARA STEELS'}
+                      {lang === 'ta' ? 'ஸ்ரீ வெங்கடேஸ்வரா ஸ்டீல்ஸ் நிறுவனத்திற்காக' : `For ${settings.storeName || 'SRI VENKATESWARA STEELS'}`}
                     </div>
-                    <div style={{ minHeight: 42, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', margin: '3px 0' }}>
-                      <img
-                        className="inv-owner-sign-img"
-                        src={OWNER_SIGN}
-                        alt="Owner Signature"
-                        style={{
-                          height: 42,
-                          maxHeight: 46,
-                          maxWidth: 150,
-                          objectFit: 'contain'
-                        }}
-                      />
-                    </div>
+                    {/* Empty space for manual pen signature after paper print */}
+                    <div style={{ height: 48, margin: '4px 0' }}></div>
                     <div style={{
                       borderTop: '1.5px dashed var(--line)',
                       paddingTop: 4,
@@ -2565,10 +2592,10 @@ export default function IssueBill({ items, bills, setBills, setItems, preset, to
                       fontWeight: 800,
                       color: 'var(--navy)'
                     }}>
-                      Owner / Authorized Signatory
+                      {lang === 'ta' ? 'உரிமையாளர் / அங்கீகரிக்கப்பட்ட கையொப்பம்' : 'Owner / Authorized Signatory'}
                     </div>
                     <div style={{ fontSize: 9.5, color: 'var(--mut)', marginTop: 1 }}>
-                      Authorized Seal &amp; Signature
+                      {lang === 'ta' ? 'அங்கீகரிக்கப்பட்ட முத்திரை & கையொப்பம்' : 'Authorized Seal & Signature'}
                     </div>
                   </div>
                 </div>

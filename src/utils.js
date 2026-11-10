@@ -1,8 +1,24 @@
 import { DEFAULT_CATEGORIES } from './data/categories';
+import { LOGO_BASE64 } from './assets/logoBase64';
 
 export const fmt = n => Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 });
 export const inr = n => '₹' + fmt(n);
-export const dt = s => s ? new Date(s).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
+export const dt = s => {
+  if (!s) return '';
+  try {
+    const d = typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s)
+      ? new Date(s + 'T00:00:00')
+      : new Date(s);
+    if (isNaN(d.getTime())) return '';
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}-${month}-${year}`;
+  } catch (e) {
+    return '';
+  }
+};
+export const formatDateDMY = dt;
 export const KEY = 'svs-steels-clean-v2';
 
 export const formatTitleCase = str => {
@@ -646,3 +662,417 @@ export async function exportToExcel(filename, rows) {
     return false;
   }
 }
+
+/**
+ * Download individual official Tax Invoice / Bill of Supply as a standalone, printable, offline PDF replica.
+ * Supported across both Desktop Electron (native vector PDF in Downloads) and web browsers (native Save as PDF dialog).
+ */
+export async function downloadInvoiceHtml(bill, settings = {}, items = [], lang = 'en', toast) {
+  if (!bill) return false;
+  const no = bill.no || 'Invoice';
+  const safeNo = no.replace(/[^a-zA-Z0-9-_]/g, '_');
+  const filename = `Invoice_${safeNo}.pdf`;
+
+  const rows = bill.rows || [];
+  const totalWeight = bill.totalWeight || rows.reduce((s, r) => s + (Number(r.weightInKg) || (Number(r.weight) > 0 ? (r.weightUnit === 'GMS' ? Number(r.weight) / 1000 : Number(r.weight)) : 0)), 0);
+  const sub = Number(bill.sub || 0);
+  const tax = Number(bill.tax || 0);
+  const total = Number(bill.total || 0);
+
+  const isTa = lang === 'ta';
+
+  const rowsHtml = rows.length ? rows.map(r => {
+    const displayName = getMaterialDisplayName(r, lang, items);
+    const weightStr = r.weight !== null && r.weight !== undefined && +r.weight > 0
+      ? (r.weightUnit === 'GMS' ? `${fmt(r.weight)} G (${fmt(r.weightInKg || (+r.weight / 1000))} KG)` : `${fmt(r.weight)}`)
+      : '-';
+    return `
+      <tr style="border-bottom:1px solid #F1F5F9;">
+        <td style="padding:7px 8px;font-size:12.5px;color:#0E1F3A;font-weight:600;text-align:left;vertical-align:middle;">
+          <div>${displayName}</div>
+          ${r.size && !displayName.includes(r.size) ? `
+            <div style="font-size:11px;color:#0E1F3A;font-weight:700;margin-top:2px;">
+              <span style="background:#F8FAFC;padding:1px 6px;border-radius:4px;border:1px solid #E2E8F0;">Size: ${r.size}</span>
+            </div>
+          ` : ''}
+        </td>
+        <td style="padding:7px 8px;text-align:center;vertical-align:middle;">
+          <span style="font-size:10.5px;background:#F1F5F9;border-radius:4px;padding:2px 7px;font-weight:700;color:#334155;display:inline-block;">${r.hsn || '-'}</span>
+        </td>
+        <td style="padding:7px 8px;text-align:right;font-weight:800;color:#0E1F3A;vertical-align:middle;">${r.qty > 0 ? fmt(r.qty) : '-'}</td>
+        <td style="padding:7px 8px;text-align:right;font-weight:700;color:#0E1F3A;vertical-align:middle;">${weightStr}</td>
+        <td style="padding:7px 8px;text-align:center;vertical-align:middle;">
+          <span style="font-family:'Plus Jakarta Sans', system-ui, sans-serif;font-weight:700;font-size:11px;background:#F8FAFC;border:1px solid #E2E8F0;padding:2px 7px;border-radius:5px;color:#0E1F3A;display:inline-block;">${r.uom || 'NOS'}</span>
+        </td>
+        <td style="padding:7px 8px;text-align:right;color:#0E1F3A;vertical-align:middle;">${fmt(r.rate)}</td>
+        <td style="padding:7px 8px;text-align:right;font-weight:800;color:#0E1F3A;vertical-align:middle;">${fmt(r.amt)}</td>
+      </tr>
+    `;
+  }).join('') : `
+    <tr>
+      <td colspan="7" style="text-align:center;padding:24px;color:#64748B;">No materials recorded in this issue bill</td>
+    </tr>
+  `;
+
+  let taxRowsHtml = '';
+  if (tax > 0) {
+    const sm = {};
+    rows.forEach(r => {
+      const slab = (r.gst !== undefined && r.gst !== null && !isNaN(r.gst)) ? Number(r.gst) : 18;
+      if (slab > 0) {
+        if (!sm[slab]) sm[slab] = { slab, halfRate: slab / 2, cgst: 0, sgst: 0 };
+        const halfTax = +((Number(r.amt || 0) * (slab / 2)) / 100).toFixed(2);
+        sm[slab].cgst += halfTax;
+        sm[slab].sgst += halfTax;
+      }
+    });
+    const slabs = Object.values(sm);
+    if (!slabs.length) {
+      slabs.push({ slab: 18, halfRate: 9, cgst: +(tax / 2).toFixed(2), sgst: +(tax / 2).toFixed(2) });
+    }
+    taxRowsHtml = slabs.map(tb => `
+      <div style="display:flex;justify-content:space-between;color:#0284C7;font-size:12px;margin-bottom:2px;">
+        <span>CGST (${tb.halfRate}%)</span>
+        <b>${inr(tb.cgst)}</b>
+      </div>
+      <div style="display:flex;justify-content:space-between;color:#0284C7;font-size:12px;margin-bottom:4px;">
+        <span>SGST (${tb.halfRate}%)</span>
+        <b>${inr(tb.sgst)}</b>
+      </div>
+    `).join('');
+  }
+
+  const html = `<!DOCTYPE html>
+<html lang="${lang}">
+<head>
+<meta charset="utf-8"/>
+<title>Tax Invoice - ${no}</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800;900&family=Mukta+Malar:wght@400;600;700;800&display=swap');
+  * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+  /* On-screen presentation: Beautiful centered A4 sheet on neutral document backdrop */
+  html {
+    background: #525659;
+    min-height: 100%;
+  }
+  body {
+    margin: 0;
+    padding: 24px 16px;
+    background: #525659;
+    font-family: 'Plus Jakarta Sans', 'Mukta Malar', system-ui, -apple-system, sans-serif;
+    color: #0E1F3A;
+    font-size: 13px;
+    line-height: 1.4;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+  }
+  .on-screen-bar {
+    position: fixed;
+    top: 14px;
+    right: 20px;
+    z-index: 9999;
+    display: flex;
+    gap: 8px;
+  }
+  .on-screen-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    background: #0E1F3A;
+    color: #FFFFFF;
+    border: 1px solid #1C3358;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.3);
+    font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  }
+  .on-screen-btn:hover {
+    background: #1C3358;
+  }
+  .inv-page-layout {
+    width: 210mm;
+    max-width: 820px;
+    min-height: 297mm;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    background: #FFFFFF;
+    padding: 14mm 16mm;
+    box-shadow: 0 10px 35px rgba(0, 0, 0, 0.35);
+    border-radius: 4px;
+    margin: 0 auto;
+  }
+  .inv-top-body {
+    flex: 1 1 auto;
+    width: 100%;
+  }
+  .inv-bottom-footer {
+    flex-shrink: 0;
+    margin-top: auto;
+    width: 100%;
+    padding-top: 14px;
+    border-top: 1.5px solid #E2E8F0;
+  }
+
+  /* Print and PDF output: Generous padding on all four sides of A4 paper */
+  @media print {
+    @page {
+      size: A4 portrait;
+      margin: 10mm 12mm;
+    }
+    html, body {
+      background: #FFFFFF !important;
+      padding: 0 !important;
+      margin: 0 !important;
+      width: 100% !important;
+      height: auto !important;
+      min-height: 0 !important;
+      display: block !important;
+    }
+    .inv-page-layout {
+      width: 100% !important;
+      max-width: 100% !important;
+      min-height: 268mm !important;
+      height: 268mm !important;
+      box-sizing: border-box !important;
+      padding: 4mm 6mm !important;
+      margin: 0 !important;
+      box-shadow: none !important;
+      border: none !important;
+      border-radius: 0 !important;
+      background: #FFFFFF !important;
+      display: flex !important;
+      flex-direction: column !important;
+      justify-content: space-between !important;
+    }
+    .inv-top-body {
+      flex: 1 1 auto !important;
+      width: 100% !important;
+    }
+    .inv-bottom-footer {
+      flex-shrink: 0 !important;
+      margin-top: auto !important;
+      width: 100% !important;
+      padding-top: 14px !important;
+      border-top: 1.5px solid #E2E8F0 !important;
+    }
+    .no-print {
+      display: none !important;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="on-screen-bar no-print">
+  <button class="on-screen-btn" onclick="window.print()">🖨 ${isTa ? 'அச்சிடுக / PDF சேமிக்க' : 'Print / Save as PDF'}</button>
+</div>
+<div class="inv-page-layout">
+  <div class="inv-top-body">
+    <!-- 1. Header with Store Details (Left) and Official Logo (Right) -->
+    <header style="display:flex;justify-content:space-between;align-items:flex-start;gap:14px;border-bottom:2px solid #D97706;padding-bottom:12px;margin-bottom:10px;">
+      <div>
+        <h4 style="margin:0;font-size:18px;font-weight:800;color:#0E1F3A;letter-spacing:.01em;">${settings.storeName || 'Sri Venkateswara Steels'}</h4>
+        <div style="font-size:11px;color:#64748B;margin-top:2px;white-space:pre-line;line-height:1.35;">
+          ${(settings.address || 'No. 42, Steel Trunk Road, Near New Bypass Bridge,\nTheni - 625 531, Theni (Dt), Tamil Nadu')}
+        </div>
+        ${(settings.phone || DEFAULT_SETTINGS?.phone) ? `
+          <div style="font-size:11px;color:#64748B;margin-top:2px;">
+            <b>${isTa ? 'தொலைபேசி: ' : 'Phone: '}</b><span style="font-family:'Plus Jakarta Sans', system-ui, sans-serif;color:#0E1F3A;font-weight:600;">${settings.phone || DEFAULT_SETTINGS?.phone}</span>
+          </div>
+        ` : ''}
+        <div style="font-size:11.5px;color:#0E1F3A;margin-top:3px;">
+          GSTIN: <b style="font-family:'Plus Jakarta Sans', system-ui, sans-serif;letter-spacing:.02em;">${settings.gstin || '33AABCS1234F1Z5'}</b> · State: <b style="font-family:'Plus Jakarta Sans', system-ui, sans-serif;">${settings.state || 'Tamil Nadu (33)'}</b>
+        </div>
+        <div style="margin-top:8px;font-size:13px;">
+          <b style="color:#0E1F3A;font-family:'Plus Jakarta Sans', system-ui, sans-serif;font-size:14px;letter-spacing:.02em;">${no}</b>
+          <br/>
+          <span style="color:#64748B;font-family:'Plus Jakarta Sans', system-ui, sans-serif;font-size:12px;">${dt(bill.date)}</span>
+        </div>
+      </div>
+      <img src="${LOGO_BASE64}" alt="SVS logo" style="width:115px;height:115px;max-width:125px;max-height:125px;object-fit:contain;flex-shrink:0;" />
+    </header>
+
+    <!-- 2. Prominent Tax Invoice Bill Title Banner -->
+    <div style="text-align:center;margin:4px 0 10px;padding:5px 0;border-top:1.5px solid #D97706;border-bottom:1.5px solid #D97706;background:#FFFDF5;font-size:13.5px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;color:#0E1F3A;font-family:'Plus Jakarta Sans', system-ui, sans-serif;">
+      ${settings.invoiceTitle || (isTa ? 'வரி விலைப்பட்டியல் / விநியோக பில்' : 'TAX INVOICE / BILL OF SUPPLY')}
+    </div>
+
+    <!-- 3. Dispatch & Consignee Information Box -->
+    <div style="font-size:12.5px;margin-bottom:14px;background:#F8FAFC;padding:12px 14px;border-radius:10px;border:1px solid #E2E8F0;font-family:'Plus Jakarta Sans', system-ui, sans-serif;">
+      <div style="display:grid;grid-template-columns:1.2fr 0.8fr;gap:12px;">
+        <div>
+          <span style="font-size:10px;font-weight:800;text-transform:uppercase;color:#64748B;letter-spacing:.05em;display:block;margin-bottom:2px;">
+            ${isTa ? 'வாடிக்கையாளர் / பெறுநர்:' : 'ISSUED TO / CONSIGNEE:'}
+          </span>
+          <div style="color:#0E1F3A;font-size:13.5px;font-weight:800;">
+            ${formatCustomerName(bill.cust) || (isTa ? 'வாடிக்கையாளர் / ஒப்பந்ததாரர்' : 'Customer / Contractor / Site')}
+          </div>
+          ${bill.address ? `
+            <div style="color:#1E293B;margin-top:4px;font-size:11.5px;line-height:1.35;">
+              <b style="color:#64748B;">${isTa ? 'முகவரி: ' : 'To Address: '}</b>${bill.address}
+            </div>
+          ` : ''}
+          ${bill.phone ? `
+            <div style="color:#64748B;margin-top:3px;font-size:11.5px;">
+              <b>${isTa ? 'தொலைபேசி:' : 'Phone:'}</b> ${bill.phone}
+            </div>
+          ` : ''}
+        </div>
+
+        <div style="border-left:1px solid #E2E8F0;padding-left:12px;">
+          <span style="font-size:10px;font-weight:800;text-transform:uppercase;color:#64748B;letter-spacing:.05em;display:block;margin-bottom:2px;">
+            ${isTa ? 'டெஸ்பாட்ச் விவரங்கள்:' : 'DISPATCH DETAILS:'}
+          </span>
+          <div style="font-size:12px;font-weight:700;color:#0E1F3A;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+            <span style="color:#64748B;font-weight:600;">${isTa ? 'வாகன எண்:' : 'Vehicle No:'}</span>
+            ${bill.veh ? `
+              <span style="font-family:'Plus Jakarta Sans', system-ui, sans-serif;font-weight:800;letter-spacing:.04em;background:#fff;padding:2px 8px;border-radius:4px;border:1px solid #E2E8F0;color:#0E1F3A;">
+                ${bill.veh.toUpperCase()}
+              </span>
+            ` : `
+              <span style="color:#64748B;font-style:italic;font-weight:500;">${isTa ? 'குறிப்பிடப்படவில்லை' : 'Not Specified'}</span>
+            `}
+          </div>
+          <div style="color:#64748B;margin-top:5px;font-size:11.5px;">
+            <b>${isTa ? 'கட்டண முறை:' : 'Payment:'}</b> ${bill.pay === 'Cash' && isTa ? 'ரொக்கம்' : (bill.pay || 'Cash')}
+          </div>
+          ${bill.project ? `
+            <div style="color:#64748B;margin-top:2px;font-size:11.5px;">
+              <b>${isTa ? 'தளம்:' : 'Site:'}</b> ${bill.project}
+            </div>
+          ` : ''}
+        </div>
+      </div>
+    </div>
+
+    <!-- 4. Items Table (Exact 7-column layout without # column) -->
+    <table style="width:100%;border-collapse:collapse;font-family:'Plus Jakarta Sans', system-ui, sans-serif;">
+      <thead>
+        <tr style="border-bottom:1.5px solid #CBD5E1;">
+          <th style="text-align:left;padding:7px 8px;font-size:12px;font-weight:700;color:#475569;">${isTa ? 'பொருள் விவரம்' : 'Item'}</th>
+          <th style="text-align:center;padding:7px 8px;font-size:12px;font-weight:700;color:#475569;">HSN</th>
+          <th style="text-align:right;padding:7px 8px;font-size:12px;font-weight:700;color:#475569;">${isTa ? 'அளவு' : 'Qty'}</th>
+          <th style="text-align:right;padding:7px 8px;font-size:12px;font-weight:700;color:#475569;">${isTa ? 'எடை' : 'Weight'}</th>
+          <th style="text-align:center;padding:7px 8px;font-size:12px;font-weight:700;color:#475569;">${isTa ? 'அலகு' : 'Unit'}</th>
+          <th style="text-align:right;padding:7px 8px;font-size:12px;font-weight:700;color:#475569;">${isTa ? 'விலை' : 'Rate'}</th>
+          <th style="text-align:right;padding:7px 8px;font-size:12px;font-weight:700;color:#475569;">${isTa ? 'தொகை' : 'Amount'}</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rowsHtml}
+      </tbody>
+    </table>
+
+    <!-- 5. Totals Section (Right-aligned aligned with Rate & Amount) -->
+    <div style="margin-left:auto;width:250px;margin-top:14px;border-top:1px dashed #CBD5E1;padding-top:8px;font-family:'Plus Jakarta Sans', system-ui, sans-serif;">
+      ${totalWeight > 0 ? `
+        <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12.5px;color:#0E1F3A;border-bottom:1px solid #E2E8F0;padding-bottom:4px;margin-bottom:4px;">
+          <span style="font-weight:700;">${isTa ? 'மொத்த எடை' : 'Total Weight'}</span>
+          <b>${fmt(totalWeight)} ${isTa ? 'கிலோ' : 'KGS'}</b>
+        </div>
+      ` : ''}
+      <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12.5px;color:#0E1F3A;">
+        <span>${isTa ? 'கூடுதல் தொகை' : 'Subtotal'}</span>
+        <b>${inr(sub)}</b>
+      </div>
+      ${taxRowsHtml}
+      <div style="display:flex;justify-content:space-between;border-top:2px solid #0E1F3A;font-weight:800;font-size:17px;margin-top:5px;padding-top:7px;color:#0E1F3A;">
+        <span>${isTa ? 'செலுத்த வேண்டிய மொத்த தொகை' : 'Total Payable'}</span>
+        <span>${inr(total)}</span>
+      </div>
+    </div>
+
+    <!-- 6. Amount in Words Card -->
+    <div style="margin-top:12px;padding:10px 14px;background:#F8FAFC;border-radius:8px;border:1px solid #E2E8F0;font-size:12px;line-height:1.45;font-family:'Plus Jakarta Sans', system-ui, sans-serif;">
+      <span style="font-size:10px;font-weight:800;text-transform:uppercase;color:#64748B;letter-spacing:.05em;display:block;margin-bottom:2px;">
+        ${isTa ? 'தொகை எழுத்துக்களில்:' : 'AMOUNT IN WORDS:'}
+      </span>
+      <b style="color:#0E1F3A;font-size:12.5px;font-family:'Plus Jakarta Sans', system-ui, sans-serif;">
+        ${amountInWords(total, lang)}
+      </b>
+    </div>
+  </div>
+
+  <!-- 7. Footer Positioned at Very Bottom: Terms & Conditions (Left) & Owner / Authorized Signatory (Right) -->
+  <div class="inv-bottom-footer" style="display:flex;justify-content:space-between;align-items:flex-end;gap:16px;font-family:'Plus Jakarta Sans', system-ui, sans-serif;">
+    <div style="max-width:58%;font-size:10px;color:#64748B;line-height:1.4;">
+      <b style="color:#0E1F3A;display:block;margin-bottom:2px;font-size:10.5px;">
+        ${isTa ? 'விதிமுறைகள் & நிபந்தனைகள்:' : 'Terms & Conditions:'}
+      </b>
+      ${isTa ? `
+        <div>1. அனுப்பப்பட்ட பொருட்கள் திரும்பப் பெறப்பட மாட்டாது.</div>
+        <div>2. தாமதமான கொடுப்பனவுகளுக்கு ஆண்டுக்கு 18% வட்டி விதிக்கப்படும்.</div>
+        <div>3. யார்டு எடைமேடையில் சரிபார்க்கப்பட்ட எடையே இறுதியானது.</div>
+        <div>4. தேனி நீதிமன்ற எல்லைக்கு உட்பட்டது.</div>
+      ` : `
+        <div>1. Goods once dispatched will not be taken back.</div>
+        <div>2. Interest @ 18% p.a. will be levied on delayed payments.</div>
+        <div>3. Weight verified at yard weighbridge is final.</div>
+        <div>4. Subject to Theni jurisdiction only.</div>
+      `}
+    </div>
+
+    <!-- Right: Owner Signatory with blank empty space for manual physical pen signature -->
+    <div style="text-align:right;min-width:200px;flex-shrink:0;">
+      <div style="font-size:11.5px;font-weight:800;color:#0E1F3A;letter-spacing:.02em;">
+        ${isTa ? 'ஸ்ரீ வெங்கடேஸ்வரா ஸ்டீல்ஸ் நிறுவனத்திற்காக' : `For ${settings.storeName || 'SRI VENKATESWARA STEELS'}`}
+      </div>
+      <div style="height:48px;margin:4px 0;"></div>
+      <div style="border-top:1.5px dashed #CBD5E1;padding-top:4px;font-size:11px;font-weight:800;color:#0E1F3A;">
+        ${isTa ? 'உரிமையாளர் / அங்கீகரிக்கப்பட்ட கையொப்பம்' : 'Owner / Authorized Signatory'}
+      </div>
+      <div style="font-size:9.5px;color:#64748B;margin-top:1px;">
+        ${isTa ? 'அங்கீகரிக்கப்பட்ட முத்திரை & கையொப்பம்' : 'Authorized Seal & Signature'}
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>`;
+
+  // 1. Native Electron PDF generator directly to Downloads folder (completely automatic, does NOT ask for printout)
+  if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.generateInvoicePdf === 'function') {
+    try {
+      const pdfFilename = `Invoice_${safeNo}.pdf`;
+      const res = await window.electronAPI.generateInvoicePdf({
+        html,
+        filename: pdfFilename
+      });
+      if (res && res.success) {
+        if (toast) toast(isTa ? `பில் PDF பதிவிறக்கப்பட்டது: ${res.filename || pdfFilename}` : `Invoice PDF saved to Downloads: ${res.filename || pdfFilename}`);
+        return true;
+      }
+    } catch (e) {
+      console.error('generateInvoicePdf failed:', e);
+    }
+  }
+
+  // 2. Web browser automatic download fallback (downloads file directly without opening printout dialog)
+  try {
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Invoice_${safeNo}.html`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => {
+      try { URL.revokeObjectURL(url); } catch (e) {}
+    }, 60000);
+    if (toast) toast(isTa ? `பில் வெற்றிகரமாக பதிவிறக்கப்பட்டது!` : `Invoice downloaded successfully!`);
+    return true;
+  } catch (err) {
+    if (toast) toast('Download failed: ' + err.message);
+    return false;
+  }
+}
+
+export const downloadInvoicePdf = downloadInvoiceHtml;

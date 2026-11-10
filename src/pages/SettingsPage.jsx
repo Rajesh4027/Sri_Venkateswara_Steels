@@ -4,7 +4,7 @@ import LOGO from '../assets/logo.png';
 import { inr, fmt, KEY, getLocalTodayYmd } from '../utils';
 import { useLanguage } from '../context/LanguageContext';
 
-const CURRENT_APP_VERSION = 'v2.8.5';
+const CURRENT_APP_VERSION = 'v2.8.6';
 const GITHUB_REPO = 'Rajesh4027/Sri_Venkateswara_Steels';
 
 function parseSemVer(v) {
@@ -42,7 +42,7 @@ export default function SettingsPage({
   setUsers,
   toast
 }) {
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
   const [form, setForm] = useState(() => ({
     ...settings,
     invoiceTitle: (settings && settings.invoiceTitle) || 'TAX INVOICE / BILL OF SUPPLY'
@@ -136,7 +136,7 @@ export default function SettingsPage({
   const handleExportJsonBackup = async () => {
     const backupData = {
       app: 'Sri Venkateswara Steels ERP',
-      version: form.appVersion || 'v2.8.5',
+      version: form.appVersion || 'v2.8.6',
       exportedAt: new Date().toISOString(),
       summary: {
         totalStockItems: items.length,
@@ -1019,28 +1019,6 @@ export default function SettingsPage({
                   >
                     <span>📂</span> Open Images Folder
                   </button>
-
-                  <button
-                    type="button"
-                    disabled={syncingImages}
-                    onClick={handleSyncImagesToDisk}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      padding: '6px 12px',
-                      background: '#fff',
-                      color: '#0f172a',
-                      border: '1px solid #cbd5e1',
-                      borderRadius: 8,
-                      fontSize: 12,
-                      fontWeight: 700,
-                      cursor: syncingImages ? 'wait' : 'pointer'
-                    }}
-                    title="Save all attached invoice bill images to local disk folder"
-                  >
-                    <span>💾</span> {syncingImages ? 'Saving...' : 'Sync to Disk'}
-                  </button>
                 </div>
               </div>
 
@@ -1365,7 +1343,8 @@ export default function SettingsPage({
                 {form.address || 'Steel Trunk Road, Theni - 625 531, Tamil Nadu'}
               </div>
               <div style={{ fontSize: 11, color: '#475569', marginTop: 4 }}>
-                Phone: <b>{form.phone || '7358912312'}</b>
+                <b>{lang === 'ta' ? 'தொலைபேசி: ' : 'Phone: '}</b>
+                <b style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif", color: '#0f172a' }}>{form.phone || '7358912312 / 04546-252233'}</b>
               </div>
               {form.gstin && (
                 <div style={{ fontSize: 11.5, color: '#0f172a', marginTop: 4 }}>

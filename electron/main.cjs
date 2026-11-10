@@ -52,7 +52,7 @@ ipcMain.handle('open-images-folder', async () => {
 
 ipcMain.handle('save-single-image', async (event, payload) => {
   try {
-    const { dataUrl, filename, invoiceNo } = payload || {};
+    const { dataUrl, filename, invoiceNo, invoiceDate } = payload || {};
     if (!dataUrl || !dataUrl.startsWith('data:')) {
       return { success: false, error: 'Invalid data' };
     }
@@ -64,7 +64,8 @@ ipcMain.handle('save-single-image', async (event, payload) => {
     const mimeType = matches[1];
     const ext = mimeType.includes('png') ? 'png' : (mimeType.includes('webp') ? 'webp' : 'jpg');
     const safeInv = String(invoiceNo || 'INV').replace(/[^a-zA-Z0-9_-]/g, '_');
-    const cleanName = filename ? filename.replace(/[^a-zA-Z0-9_.-]/g, '_') : `Invoice_${safeInv}_${Date.now()}.${ext}`;
+    const safeDate = String(invoiceDate || '').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const cleanName = safeDate ? `Invoice_${safeInv}_${safeDate}.${ext}` : `Invoice_${safeInv}.${ext}`;
     const filePath = path.join(dir, cleanName);
     fs.writeFileSync(filePath, Buffer.from(matches[2], 'base64'));
     return { success: true, filePath, filename: cleanName, imagesDir: dir };
@@ -85,7 +86,8 @@ ipcMain.handle('sync-all-images', async (event, invoices = []) => {
             const mimeType = matches[1];
             const ext = mimeType.includes('png') ? 'png' : 'jpg';
             const safeInv = String(inv.inv || inv.id || 'INV').replace(/[^a-zA-Z0-9_-]/g, '_');
-            const filename = `Invoice_${safeInv}.${ext}`;
+            const safeDate = String(inv.date || '').replace(/[^a-zA-Z0-9_-]/g, '_');
+            const filename = safeDate ? `Invoice_${safeInv}_${safeDate}.${ext}` : `Invoice_${safeInv}.${ext}`;
             const filePath = path.join(dir, filename);
             fs.writeFileSync(filePath, Buffer.from(matches[2], 'base64'));
             savedCount++;
@@ -94,6 +96,70 @@ ipcMain.handle('sync-all-images', async (event, invoices = []) => {
       }
     }
     return { success: true, savedCount, imagesDir: dir };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+// IPC: Direct Invoice PDF generation to user's local disk Downloads folder
+ipcMain.handle('generate-invoice-pdf', async (event, payload) => {
+  let win = null;
+  try {
+    const { html, filename } = payload || {};
+    if (!html) return { success: false, error: 'HTML is required' };
+
+    win = new BrowserWindow({
+      show: false,
+      width: 800,
+      height: 1150,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true
+      }
+    });
+
+    await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+
+    // Give time for layout, fonts, and inline images to finish rendering
+    await new Promise(resolve => setTimeout(resolve, 500));
+
+    const pdfBuffer = await win.webContents.printToPDF({
+      pageSize: 'A4',
+      printBackground: true,
+      margins: {
+        top: 0.5,
+        bottom: 0.5,
+        left: 0.55,
+        right: 0.55
+      }
+    });
+
+    const downloadsDir = app.getPath('downloads');
+    const safeFilename = filename
+      ? (filename.toLowerCase().endsWith('.pdf') ? filename : `${filename}.pdf`)
+      : `Invoice_${Date.now()}.pdf`;
+
+    const targetPath = path.join(downloadsDir, safeFilename);
+
+    fs.writeFileSync(targetPath, pdfBuffer);
+
+    return { success: true, filePath: targetPath, filename: safeFilename };
+  } catch (err) {
+    return { success: false, error: err.message };
+  } finally {
+    if (win && !win.isDestroyed()) {
+      try { win.close(); } catch (e) { }
+    }
+  }
+});
+
+ipcMain.handle('open-file', async (event, filePath) => {
+  try {
+    if (filePath && fs.existsSync(filePath)) {
+      await shell.openPath(filePath);
+      return { success: true };
+    }
+    return { success: false, error: 'File not found' };
   } catch (err) {
     return { success: false, error: err.message };
   }

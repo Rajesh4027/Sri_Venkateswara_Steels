@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import Modal from './Modal';
 import Ic from './Icon';
 import { InwardMaterialCombobox, InwardTamilMaterialInput } from './MaterialCombobox';
-import { fmt, inr, getSupplierMaterials, DEFAULT_CATEGORIES_LIST, DEFAULT_UOMS_LIST, inferTamilName, getMaterialDisplayName, formatTitleCase } from '../utils';
+import { fmt, inr, dt, getSupplierMaterials, DEFAULT_CATEGORIES_LIST, DEFAULT_UOMS_LIST, inferTamilName, getMaterialDisplayName, formatTitleCase } from '../utils';
 import { COMMON_HSN_CODES, COMMON_UOMS } from '../data/categories';
 import { useLanguage } from '../context/LanguageContext';
 
@@ -105,8 +105,8 @@ export default function InwardEntryModal({
         try {
           await window.electronAPI.saveSingleImage({
             dataUrl,
-            invoiceNo: invNo || 'Draft',
-            filename: file.name
+            invoiceNo: invNo.trim() || 'Draft',
+            invoiceDate: invDate || ''
           });
           toast('✓ Bill photo saved to local disk & attached');
         } catch (err) {
@@ -261,6 +261,16 @@ export default function InwardEntryModal({
     };
 
     setInwardInvoices([newInvoice, ...inwardInvoices]);
+
+    // Ensure final bill image is saved to local disk with final invoiceNo and invoiceDate
+    if (billImage && window.electronAPI?.saveSingleImage) {
+      window.electronAPI.saveSingleImage({
+        dataUrl: billImage,
+        invoiceNo: invNo.trim(),
+        invoiceDate: invDate || ''
+      }).catch(() => {});
+    }
+
     toast(`Stock updated! Invoice #${invNo} recorded.`);
     onClose();
   };
@@ -290,7 +300,10 @@ export default function InwardEntryModal({
               />
             </label>
             <label className="fl">
-              <span>Invoice Date *</span>
+              <span>Invoice Date *</span>{' '}
+              <span style={{ fontSize: 11, color: 'var(--mut)', fontWeight: 600 }}>
+                (DD-MM-YYYY: {dt(invDate)})
+              </span>
               <input
                 className="in"
                 type="date"

@@ -2,8 +2,8 @@ import { useState, useMemo, useRef, Fragment } from 'react';
 import { createPortal } from 'react-dom';
 import Ic from '../components/Icon';
 import LOGO from '../assets/logo.png';
-import OWNER_SIGN from '../assets/Owner Signature.jpeg';
-import { inr, fmt, dt, amountInWords, exportToExcel, formatCustomerName, getMaterialDisplayName, getLocalTodayYmd } from '../utils';
+
+import { inr, fmt, dt, amountInWords, exportToExcel, formatCustomerName, getMaterialDisplayName, getLocalTodayYmd, downloadInvoiceHtml, DEFAULT_SETTINGS } from '../utils';
 import { useLanguage } from '../context/LanguageContext';
 
 /**
@@ -340,14 +340,14 @@ export default function IssuedBillsHistory({
     }).sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
   }, [bills, search, filterPay, filterDate, fromDate, toDate]);
 
-  // ── Summary KPI Metrics ──
+  // ── Summary KPI Metrics (Calculates dynamically from filtered results) ──
   const stats = useMemo(() => {
     let totalAmt = 0;
     let cashUpiAmt = 0;
     let creditDebitAmt = 0;
     let lineItemsCount = 0;
 
-    bills.forEach(b => {
+    filteredBills.forEach(b => {
       const amt = Number(b.total) || 0;
       totalAmt += amt;
       const p = (b.pay || '').toLowerCase();
@@ -360,13 +360,13 @@ export default function IssuedBillsHistory({
     });
 
     return {
-      count: bills.length,
+      count: filteredBills.length,
       totalAmt,
       cashUpiAmt,
       creditDebitAmt,
       lineItemsCount
     };
-  }, [bills]);
+  }, [filteredBills]);
 
   // ── Export CSV Ledger ──
   const handleExportCsv = async () => {
@@ -380,7 +380,6 @@ export default function IssuedBillsHistory({
       'Issue Bill No',
       'Date',
       'Customer Name',
-      'Site / Project Stage',
       'Contact Phone',
       'Vehicle No',
       'Payment Mode',
@@ -406,7 +405,6 @@ export default function IssuedBillsHistory({
           `"${b.no || ''}"`,
           `"${dt(b.date)}"`,
           `"${(b.cust || '').replace(/"/g, '""')}"`,
-          `"${(b.project || '').replace(/"/g, '""')}"`,
           `"${b.phone || ''}"`,
           `"${b.veh || ''}"`,
           `"${b.pay || ''}"`,
@@ -466,26 +464,30 @@ export default function IssuedBillsHistory({
 
     const exportRows = [];
     listToExport.forEach((b, idx) => {
-      const itemsSummary = (b.rows || [])
-        .map(r => `${r.name} (${r.weight ? fmt(r.weight) + ' ' + (r.weightUnit || 'KG') : fmt(r.qty) + ' ' + (r.uom || '')} @ ₹${fmt(r.rate)})`)
-        .join('; ');
+      const billRows = (b.rows && b.rows.length) ? b.rows : [{ name: '-', qty: 0, weight: '', uom: '', rate: 0 }];
+      const totalItems = billRows.length;
 
-      exportRows.push({
-        'S.No': idx + 1,
-        'Issue Bill No': b.no || '',
-        'Date': b.date ? dt(b.date) : '',
-        'Customer / Contractor': b.cust || '',
-        'Site / Project Stage': b.project || '',
-        'Contact Phone': b.phone || '',
-        'Vehicle No': b.veh || '',
-        'Payment Mode': b.pay || '',
-        'Total Line Items': (b.rows || []).length,
-        'Total Weight (KGS)': Number(b.totalWeight || 0),
-        'Dispatched Materials Summary': itemsSummary,
-        'Subtotal (₹)': Number(b.sub || 0),
-        'GST Tax (₹)': Number(b.tax || 0),
-        'Total Amount (₹)': Number(b.total || 0),
-        'Issued By': b.by || 'Store Incharge'
+      billRows.forEach((r, itemIdx) => {
+        const isFirst = itemIdx === 0;
+        const isLast = itemIdx === totalItems - 1;
+        const itemText = `${r.name || ''} (${r.weight ? fmt(r.weight) + ' ' + (r.weightUnit || 'KG') : fmt(r.qty) + ' ' + (r.uom || '')} @ ₹${fmt(r.rate || 0)})`.trim();
+
+        exportRows.push({
+          'S.No': isFirst ? (idx + 1) : '',
+          'Issue Bill No': isFirst ? (b.no || '') : '',
+          'Date': isFirst ? (b.date ? dt(b.date) : '') : '',
+          'Customer / Contractor': isFirst ? (b.cust || '') : '',
+          'Contact Phone': isFirst ? (b.phone || '') : '',
+          'Vehicle No': isFirst ? (b.veh || '') : '',
+          'Payment Mode': isFirst ? (b.pay || '') : '',
+          'Total Line Items': isFirst ? totalItems : '',
+          'Total Weight (KGS)': isFirst ? Number(b.totalWeight || 0) : '',
+          'Dispatched Materials Summary': itemText,
+          'Subtotal (₹)': isLast ? Number(b.sub || 0) : '',
+          'GST Tax (₹)': isLast ? Number(b.tax || 0) : '',
+          'Total Amount (₹)': isLast ? Number(b.total || 0) : '',
+          'Issued By': isLast ? (b.by || 'Store Incharge') : ''
+        });
       });
     });
 
@@ -909,6 +911,17 @@ export default function IssuedBillsHistory({
                           <Ic n="print" s={13} />
                         </button>
 
+                        {/* Quick Download Button */}
+                        <button
+                          type="button"
+                          className="btn sm"
+                          onClick={() => downloadInvoiceHtml(b, settings, items, lang, toast)}
+                          style={{ padding: '4px 7px', fontSize: 11, color: '#065F46', background: '#ECFDF5', borderColor: '#A7F3D0' }}
+                          title={t('downloadInvoiceTooltip') || (lang === 'ta' ? 'பில் பதிவிறக்கம்' : 'Download Invoice')}
+                        >
+                          <Ic n="download" s={13} />
+                        </button>
+
                         {/* Edit Button */}
                         <button
                           type="button"
@@ -972,7 +985,7 @@ export default function IssuedBillsHistory({
                 border: '1px solid #fde68a',
                 letterSpacing: '.04em'
               }}>
-                OFFICIAL ISSUE VOUCHER &amp; TAX INVOICE
+                {lang === 'ta' ? 'அதிகாரப்பூர்வ பில் ரசீது & வரி விலைப்பட்டியல்' : 'OFFICIAL ISSUE VOUCHER & TAX INVOICE'}
               </span>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button
@@ -986,7 +999,7 @@ export default function IssuedBillsHistory({
                   style={{ gap: 5, background: 'var(--goldbg)', color: 'var(--navy)', borderColor: '#fde68a', fontWeight: 700 }}
                   title="Open bill in Issue Bill screen to edit items, add materials or update details"
                 >
-                  <Ic n="edit" s={14} /> Edit Bill
+                  <Ic n="edit" s={14} /> {lang === 'ta' ? 'பில் திருத்துக' : 'Edit Bill'}
                 </button>
                 <button
                   type="button"
@@ -994,13 +1007,23 @@ export default function IssuedBillsHistory({
                   onClick={() => window.print()}
                   style={{ gap: 5, background: 'var(--navy)', color: '#fff', borderColor: 'var(--navy)' }}
                 >
-                  <Ic n="print" s={14} /> Print Slip
+                  <Ic n="print" s={14} /> {lang === 'ta' ? 'பில் அச்சிடுக' : 'Print Slip'}
+                </button>
+                <button
+                  type="button"
+                  className="btn sm"
+                  onClick={() => downloadInvoiceHtml(viewBill, settings, items, lang, toast)}
+                  style={{ gap: 5, background: '#ECFDF5', color: '#065F46', borderColor: '#A7F3D0', fontWeight: 700 }}
+                  title={lang === 'ta' ? 'பில் பதிவிறக்கம்' : 'Download Invoice'}
+                >
+                  <Ic n="download" s={14} /> {lang === 'ta' ? 'பதிவிறக்கு' : 'Download'}
                 </button>
                 <button
                   type="button"
                   className="ib"
                   onClick={() => setViewBill(null)}
                   style={{ width: 32, height: 32 }}
+                  title={t('close')}
                 >
                   <Ic n="x" s={16} />
                 </button>
@@ -1016,6 +1039,14 @@ export default function IssuedBillsHistory({
                     {settings.address && (
                       <div style={{ fontSize: 11, color: 'var(--mut)', marginTop: 2, whiteSpace: 'pre-line', lineHeight: 1.35 }}>
                         {settings.address}
+                      </div>
+                    )}
+                    {(settings.phone || DEFAULT_SETTINGS?.phone) && (
+                      <div style={{ fontSize: 11, color: 'var(--mut)', marginTop: 2 }}>
+                        <b>{lang === 'ta' ? 'தொலைபேசி: ' : 'Phone: '}</b>
+                        <span style={{ fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif", color: 'var(--navy)', fontWeight: 600 }}>
+                          {settings.phone || DEFAULT_SETTINGS?.phone}
+                        </span>
                       </div>
                     )}
                     {settings.gstin && (
@@ -1054,7 +1085,7 @@ export default function IssuedBillsHistory({
                   color: 'var(--navy)',
                   fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif"
                 }}>
-                  {settings.invoiceTitle || 'TAX INVOICE / BILL OF SUPPLY'}
+                  {settings.invoiceTitle || (lang === 'ta' ? 'வரி விலைப்பட்டியல் / விநியோக பில்' : 'TAX INVOICE / BILL OF SUPPLY')}
                 </div>
 
                 {/* Dispatch & Consignee Information Box */}
@@ -1069,30 +1100,30 @@ export default function IssuedBillsHistory({
                   <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: 12 }}>
                     <div>
                       <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', color: 'var(--mut)', letterSpacing: '.05em', display: 'block', marginBottom: 2 }}>
-                        Issued To / Consignee:
+                        {lang === 'ta' ? 'வாடிக்கையாளர் / பெறுநர்:' : 'Issued To / Consignee:'}
                       </span>
                       <div style={{ color: 'var(--navy)', fontSize: 13.5, fontWeight: 800 }}>
-                        {formatCustomerName(viewBill.cust) || 'Customer / Contractor / Site'}
+                        {formatCustomerName(viewBill.cust) || (lang === 'ta' ? 'வாடிக்கையாளர் / ஒப்பந்ததாரர்' : 'Customer / Contractor / Site')}
                       </div>
                       {viewBill.address && (
                         <div style={{ color: 'var(--ink)', marginTop: 4, fontSize: 11.5, lineHeight: 1.35 }}>
-                          <b style={{ color: 'var(--mut)' }}>To Address: </b>
+                          <b style={{ color: 'var(--mut)' }}>{lang === 'ta' ? 'முகவரி: ' : 'To Address: '}</b>
                           {viewBill.address}
                         </div>
                       )}
                       {viewBill.phone && (
                         <div style={{ color: 'var(--mut)', marginTop: 3, fontSize: 11.5 }}>
-                          <b>Phone:</b> {viewBill.phone}
+                          <b>{lang === 'ta' ? 'தொலைபேசி:' : 'Phone:'}</b> {viewBill.phone}
                         </div>
                       )}
                     </div>
 
                     <div style={{ borderLeft: '1px solid var(--line)', paddingLeft: 12 }}>
                       <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', color: 'var(--mut)', letterSpacing: '.05em', display: 'block', marginBottom: 2 }}>
-                        Dispatch Details:
+                        {lang === 'ta' ? 'டெஸ்பாட்ச் விவரங்கள்:' : 'Dispatch Details:'}
                       </span>
                       <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--navy)', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                        <span style={{ color: 'var(--mut)', fontWeight: 600 }}>Vehicle No:</span>
+                        <span style={{ color: 'var(--mut)', fontWeight: 600 }}>{lang === 'ta' ? 'வாகன எண்:' : 'Vehicle No:'}</span>
                         {viewBill.veh ? (
                           <span style={{
                             fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
@@ -1108,16 +1139,16 @@ export default function IssuedBillsHistory({
                           </span>
                         ) : (
                           <span style={{ color: 'var(--mut)', fontStyle: 'italic', fontWeight: 500 }}>
-                            Not Specified
+                            {lang === 'ta' ? 'குறிப்பிடப்படவில்லை' : 'Not Specified'}
                           </span>
                         )}
                       </div>
                       <div style={{ color: 'var(--mut)', marginTop: 5, fontSize: 11.5 }}>
-                        <b>Payment:</b> {viewBill.pay || 'Cash'}
+                        <b>{lang === 'ta' ? 'கட்டண முறை:' : 'Payment:'}</b> {viewBill.pay === 'Cash' && lang === 'ta' ? 'ரொக்கம்' : (viewBill.pay || 'Cash')}
                       </div>
                       {viewBill.project && (
                         <div style={{ color: 'var(--mut)', marginTop: 2, fontSize: 11.5 }}>
-                          <b>Site:</b> {viewBill.project}
+                          <b>{lang === 'ta' ? 'தளம்:' : 'Site:'}</b> {viewBill.project}
                         </div>
                       )}
                     </div>
@@ -1127,13 +1158,13 @@ export default function IssuedBillsHistory({
                 <table>
                   <thead>
                     <tr>
-                      <th>{t('colItem') || 'Item'}</th>
-                      <th>{t('colHsn') || 'HSN'}</th>
-                      <th className="r">{t('colQty') || 'Qty'}</th>
-                      <th className="r">{t('colWeight') || 'Weight'}</th>
-                      <th style={{ textAlign: 'center' }}>{t('colUnit') || 'Unit'}</th>
-                      <th className="r">{t('colRate') || 'Rate'}</th>
-                      <th className="r">{t('colAmount') || 'Amount'}</th>
+                      <th>{lang === 'ta' ? 'பொருள் விவரம்' : 'Item'}</th>
+                      <th>HSN</th>
+                      <th className="r">{lang === 'ta' ? 'அளவு' : 'Qty'}</th>
+                      <th className="r">{lang === 'ta' ? 'எடை' : 'Weight'}</th>
+                      <th style={{ textAlign: 'center' }}>{lang === 'ta' ? 'அலகு' : 'Unit'}</th>
+                      <th className="r">{lang === 'ta' ? 'விலை' : 'Rate'}</th>
+                      <th className="r">{lang === 'ta' ? 'தொகை' : 'Amount'}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1197,12 +1228,12 @@ export default function IssuedBillsHistory({
                 <div className="tot">
                   {viewBill.totalWeight > 0 && (
                     <div style={{ color: 'var(--navy)', borderBottom: '1px solid var(--line)', paddingBottom: 4, marginBottom: 4 }}>
-                      <span style={{ fontWeight: 700 }}>Total Weight</span>
-                      <b>{fmt(viewBill.totalWeight)} KGS</b>
+                      <span style={{ fontWeight: 700 }}>{lang === 'ta' ? 'மொத்த எடை' : 'Total Weight'}</span>
+                      <b>{fmt(viewBill.totalWeight)} {lang === 'ta' ? 'கிலோ' : 'KGS'}</b>
                     </div>
                   )}
                   <div>
-                    <span>Subtotal</span>
+                    <span>{lang === 'ta' ? 'கூடுதல் தொகை' : 'Subtotal'}</span>
                     <b>{inr(viewBill.sub)}</b>
                   </div>
                   {Number(viewBill.tax || 0) > 0 && (() => {
@@ -1253,7 +1284,7 @@ export default function IssuedBillsHistory({
                     ));
                   })()}
                   <div className="g">
-                    <span>Total Payable</span>
+                    <span>{lang === 'ta' ? 'செலுத்த வேண்டிய மொத்த தொகை' : 'Total Payable'}</span>
                     <span>{inr(viewBill.total)}</span>
                   </div>
                 </div>
@@ -1291,37 +1322,41 @@ export default function IssuedBillsHistory({
                   {/* Left Column: Terms & Conditions */}
                   {settings.terms ? (
                     <div style={{ maxWidth: '58%', fontSize: 10, color: 'var(--mut)', lineHeight: 1.4 }}>
-                      <b style={{ color: 'var(--navy)', display: 'block', marginBottom: 2, fontSize: 10.5 }}>Terms &amp; Conditions:</b>
+                      <b style={{ color: 'var(--navy)', display: 'block', marginBottom: 2, fontSize: 10.5 }}>
+                        {lang === 'ta' ? 'விதிமுறைகள் & நிபந்தனைகள்:' : 'Terms & Conditions:'}
+                      </b>
                       <div style={{ whiteSpace: 'pre-line' }}>{settings.terms}</div>
                     </div>
                   ) : (
                     <div style={{ maxWidth: '58%', fontSize: 10, color: 'var(--mut)', lineHeight: 1.4 }}>
-                      <b style={{ color: 'var(--navy)', display: 'block', marginBottom: 2, fontSize: 10.5 }}>Terms &amp; Conditions:</b>
-                      <div>1. Goods once dispatched will not be taken back.</div>
-                      <div>2. Interest @ 18% p.a. will be levied on delayed payments.</div>
-                      <div>3. Weight verified at yard weighbridge is final.</div>
-                      <div>4. Subject to Theni jurisdiction only.</div>
+                      <b style={{ color: 'var(--navy)', display: 'block', marginBottom: 2, fontSize: 10.5 }}>
+                        {lang === 'ta' ? 'விதிமுறைகள் & நிபந்தனைகள்:' : 'Terms & Conditions:'}
+                      </b>
+                      {lang === 'ta' ? (
+                        <>
+                          <div>1. அனுப்பப்பட்ட பொருட்கள் திரும்பப் பெறப்பட மாட்டாது.</div>
+                          <div>2. தாமதமான கொடுப்பனவுகளுக்கு ஆண்டுக்கு 18% வட்டி விதிக்கப்படும்.</div>
+                          <div>3. யார்டு எடைமேடையில் சரிபார்க்கப்பட்ட எடையே இறுதியானது.</div>
+                          <div>4. தேனி நீதிமன்ற எல்லைக்கு உட்பட்டது.</div>
+                        </>
+                      ) : (
+                        <>
+                          <div>1. Goods once dispatched will not be taken back.</div>
+                          <div>2. Interest @ 18% p.a. will be levied on delayed payments.</div>
+                          <div>3. Weight verified at yard weighbridge is final.</div>
+                          <div>4. Subject to Theni jurisdiction only.</div>
+                        </>
+                      )}
                     </div>
                   )}
 
-                  {/* Right Column: Owner Signature for Sri Venkateswara Steels */}
+                  {/* Right Column: Owner Signature for Sri Venkateswara Steels (Empty for manual signing) */}
                   <div style={{ textAlign: 'right', minWidth: 200, flexShrink: 0 }}>
                     <div style={{ fontSize: 11.5, fontWeight: 800, color: 'var(--navy)', letterSpacing: '.02em' }}>
-                      For {settings.storeName || 'SRI VENKATESWARA STEELS'}
+                      {lang === 'ta' ? 'ஸ்ரீ வெங்கடேஸ்வரா ஸ்டீல்ஸ் நிறுவனத்திற்காக' : `For ${settings.storeName || 'SRI VENKATESWARA STEELS'}`}
                     </div>
-                    <div style={{ minHeight: 42, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', margin: '3px 0' }}>
-                      <img
-                        className="inv-owner-sign-img"
-                        src={OWNER_SIGN}
-                        alt="Owner Signature"
-                        style={{
-                          height: 42,
-                          maxHeight: 46,
-                          maxWidth: 150,
-                          objectFit: 'contain'
-                        }}
-                      />
-                    </div>
+                    {/* Empty space for manual pen signature after paper print */}
+                    <div style={{ height: 48, margin: '4px 0' }}></div>
                     <div style={{
                       borderTop: '1.5px dashed var(--line)',
                       paddingTop: 4,
@@ -1329,10 +1364,10 @@ export default function IssuedBillsHistory({
                       fontWeight: 800,
                       color: 'var(--navy)'
                     }}>
-                      Owner / Authorized Signatory
+                      {lang === 'ta' ? 'உரிமையாளர் / அங்கீகரிக்கப்பட்ட கையொப்பம்' : 'Owner / Authorized Signatory'}
                     </div>
                     <div style={{ fontSize: 9.5, color: 'var(--mut)', marginTop: 1 }}>
-                      Authorized Seal &amp; Signature
+                      {lang === 'ta' ? 'அங்கீகரிக்கப்பட்ட முத்திரை & கையொப்பம்' : 'Authorized Seal & Signature'}
                     </div>
                   </div>
                 </div>

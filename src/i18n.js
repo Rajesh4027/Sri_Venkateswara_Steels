@@ -458,7 +458,13 @@ export const translations = {
     cancelBtn: 'Cancel',
     colItem: 'Item',
     colHsn: 'HSN',
-    colUnit: 'Unit'
+    colQty: 'Qty',
+    colWeight: 'Weight',
+    colUnit: 'Unit',
+    colRate: 'Rate',
+    colAmount: 'Amount',
+    downloadInvoiceTooltip: 'Download official tax invoice bill',
+    downloadInvoiceBtn: 'Download Invoice'
   },
 
   ta: {
@@ -910,9 +916,15 @@ export const translations = {
     verificationCodePrompt: 'நீக்குவதை உறுதிப்படுத்த 6-இலக்க சரிபார்ப்புக் குறியீட்டை உள்ளிடவும்:',
     confirmDeleteBtn: 'உறுதிசெய்து நீக்குக',
     cancelBtn: 'ரத்து செய்',
-    colItem: 'பொருள்',
+    colItem: 'பொருள் விவரம்',
     colHsn: 'HSN',
-    colUnit: 'அலகு'
+    colQty: 'அளவு',
+    colWeight: 'எடை',
+    colUnit: 'அலகு',
+    colRate: 'விலை',
+    colAmount: 'தொகை',
+    downloadInvoiceTooltip: 'அதிகாரப்பூர்வ வரி பில் பதிவிறக்கம்',
+    downloadInvoiceBtn: 'பில் பதிவிறக்கு'
   }
 };
 

@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import Ic from '../components/Icon';
 import { InwardMaterialCombobox, InwardTamilMaterialInput } from '../components/MaterialCombobox';
-import { fmt, inr, getSupplierMaterials, getMaterialDisplayName, inferTamilName, formatTitleCase, DEFAULT_CATEGORIES_LIST, DEFAULT_UOMS_LIST } from '../utils';
+import { fmt, inr, dt, getSupplierMaterials, getMaterialDisplayName, inferTamilName, formatTitleCase, DEFAULT_CATEGORIES_LIST, DEFAULT_UOMS_LIST } from '../utils';
 import { COMMON_HSN_CODES, COMMON_UOMS } from '../data/categories';
 import { useTranslation } from '../context/LanguageContext';
 
@@ -216,8 +216,8 @@ export default function InwardEntryPage({
         try {
           await window.electronAPI.saveSingleImage({
             dataUrl,
-            invoiceNo: invNo || 'Draft',
-            filename: file.name
+            invoiceNo: invNo.trim() || 'Draft',
+            invoiceDate: invDate || ''
           });
           toast('✓ Bill photo saved to local disk & attached');
         } catch (err) {
@@ -396,6 +396,14 @@ export default function InwardEntryPage({
       try {
         localStorage.removeItem(INWARD_DRAFT_KEY);
       } catch (e) { }
+    }
+
+    if (billImage && window.electronAPI?.saveSingleImage) {
+      window.electronAPI.saveSingleImage({
+        dataUrl: billImage,
+        invoiceNo: invNo.trim(),
+        invoiceDate: invDate || ''
+      }).catch(() => {});
     }
 
     if (editingInvoice) {
@@ -608,7 +616,12 @@ export default function InwardEntryPage({
           </div>
 
           <div className="field-group">
-            <label className="field-label">{t('invoiceDateLabel')}</label>
+            <label className="field-label">
+              {t('invoiceDateLabel')}{' '}
+              <span style={{ fontSize: 11, color: 'var(--mut)', fontWeight: 600 }}>
+                (DD-MM-YYYY: {dt(invDate)})
+              </span>
+            </label>
             <input
               className="in"
               type="date"
