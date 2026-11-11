@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import Modal from './Modal';
 import Ic from './Icon';
 import { InwardMaterialCombobox, InwardTamilMaterialInput } from './MaterialCombobox';
-import { fmt, inr, dt, getSupplierMaterials, DEFAULT_CATEGORIES_LIST, DEFAULT_UOMS_LIST, inferTamilName, getMaterialDisplayName, formatTitleCase } from '../utils';
+import { fmt, inr, dt, getSupplierMaterials, DEFAULT_CATEGORIES_LIST, DEFAULT_UOMS_LIST, inferTamilName, getMaterialDisplayName, formatTitleCase, isMaterialMatch, getNextMaterialId, deduplicateItems } from '../utils';
 import { COMMON_HSN_CODES, COMMON_UOMS } from '../data/categories';
 import { useLanguage } from '../context/LanguageContext';
 
@@ -147,46 +147,39 @@ export default function InwardEntryModal({
     }
 
     // 1. Update Stock Inventory
-    let updatedItems = [...items];
-    let nextCodeNum = items.length + 1;
+    let updatedItems = deduplicateItems([...items]);
 
     calc.rows.forEach(row => {
-      if (!row.name.trim() || row.qty <= 0) return;
+      const hasEn = Boolean(row.name && row.name.trim());
+      const hasTa = Boolean(row.nameTa && row.nameTa.trim());
+      if ((!hasEn && !hasTa) || row.qty <= 0) return;
 
-      const normName = row.name.trim().toUpperCase();
-      const normNameTa = row.nameTa?.trim() || inferTamilName(normName);
-      let matchIdx = -1;
-
-      if (row.id) {
-        matchIdx = updatedItems.findIndex(i => i.id === row.id);
-      }
-      if (matchIdx === -1) {
-        matchIdx = updatedItems.findIndex(i => i.name.toUpperCase() === normName);
-      }
-      if (matchIdx === -1 && normNameTa) {
-        matchIdx = updatedItems.findIndex(i => i.nameTa && i.nameTa.trim() === normNameTa);
-      }
+      const normName = hasEn ? row.name.trim().toUpperCase() : row.nameTa.trim();
+      const normNameTa = hasTa ? row.nameTa.trim() : (inferTamilName(normName) || '');
+      const matchIdx = updatedItems.findIndex(i => isMaterialMatch(i, normName, normNameTa, row.id));
 
       if (matchIdx >= 0) {
-        // Existing material -> increase received stock, update rate, hsn, gst, and sync BOTH names to SAME stock record
+        // Existing material -> increase received stock, update rate, uom, hsn, gst, and sync BOTH names to SAME stock record
         const target = updatedItems[matchIdx];
         const rowGst = (row.gst !== undefined && row.gst !== '' && !isNaN(row.gst))
           ? Number(row.gst)
           : (target.gst !== undefined ? Number(target.gst) : 18);
+        const finalUom = (row.uom && row.uom.trim()) ? row.uom.trim() : (target.uom || 'NOS');
         updatedItems[matchIdx] = {
           ...target,
           name: normName || target.name,
           nameTa: normNameTa || target.nameTa,
-          recv: +(target.recv + row.qty).toFixed(2),
-          rate: row.rate > 0 ? row.rate : target.rate,
+          uom: finalUom,
+          recv: +(Number(target.recv || 0) + Number(row.qty)).toFixed(2),
+          rate: Number(row.rate) > 0 ? Number(row.rate) : target.rate,
           last: invDate,
           hsn: row.hsn || target.hsn,
           cat: row.cat || target.cat,
           gst: rowGst
         };
       } else {
-        // New material -> create new stock item with unified id, English name, and Tamil name
-        const newId = 'SVS-' + String(nextCodeNum++).padStart(3, '0');
+        // New material -> create new stock item with unified safe unique id
+        const newId = getNextMaterialId(updatedItems);
         const rowGst = (row.gst !== undefined && row.gst !== '' && !isNaN(row.gst))
           ? Number(row.gst)
           : 18;
@@ -207,7 +200,7 @@ export default function InwardEntryModal({
       }
     });
 
-    setItems(updatedItems);
+    setItems(deduplicateItems(updatedItems));
 
     // 2. Save Inward Invoice Entry
     const newInvoice = {
@@ -465,6 +458,7 @@ export default function InwardEntryModal({
                             <InwardMaterialCombobox
                               row={row}
                               items={displayItems}
+                              allItems={items}
                               placeholder={t('englishNamePlaceholder')}
                               onSelectExisting={it => {
                                 setRow(idx, {
@@ -520,6 +514,7 @@ export default function InwardEntryModal({
                             <InwardTamilMaterialInput
                               row={row}
                               items={displayItems}
+                              allItems={items}
                               placeholder={t('tamilNamePlaceholder')}
                               onChangeTamilName={text => {
                                 setRow(idx, { nameTa: text });

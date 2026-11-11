@@ -104,6 +104,7 @@ function highlightMatch(text, query) {
 export function InwardMaterialCombobox({
   row,
   items = [],
+  allItems = [],
   onSelectExisting,
   onAddNew,
   onClear,
@@ -125,10 +126,21 @@ export function InwardMaterialCombobox({
     }
   }, [row.name, row.id, row.isNew, isOpen]);
 
+  // Helper to compute matches synchronously on any keystroke (including single character e.g. "N")
+  const getMatchesFor = (text) => {
+    const q = (text || '').trim();
+    if (!q) return [];
+    const directMatches = filterInwardMatches(q, items);
+    if (directMatches.length > 0 || !allItems || allItems.length === 0) {
+      return directMatches;
+    }
+    return filterInwardMatches(q, allItems);
+  };
+
   // Compute matching existing items based on query (searches both English & Tamil names)
   const matchingItems = useMemo(() => {
-    return filterInwardMatches(query, items);
-  }, [query, items]);
+    return getMatchesFor(query);
+  }, [query, items, allItems]);
 
   // Reposition floating dropdown dynamically with viewport collision detection
   const updatePosition = () => {
@@ -202,8 +214,9 @@ export function InwardMaterialCombobox({
       return;
     }
 
-    // Check if what user typed matches an existing product
-    const exactMatch = items.find(it => (it.name || '').trim().toLowerCase() === trimmed.toLowerCase());
+    // Check if what user typed matches an existing product (check all stock items)
+    const pool = (allItems && allItems.length > 0) ? allItems : items;
+    const exactMatch = pool.find(it => (it.name || '').trim().toLowerCase() === trimmed.toLowerCase());
     if (exactMatch) {
       onSelectExisting(exactMatch);
     } else {
@@ -217,9 +230,9 @@ export function InwardMaterialCombobox({
       return;
     }
 
-    // Filter matching existing items
+    // Filter matching existing items synchronously so single letter (e.g. "N") shows matches instantly
     if (trimmed.length > 0) {
-      const matches = filterInwardMatches(trimmed, items);
+      const matches = getMatchesFor(trimmed);
       if (matches.length > 0) {
         setIsOpen(true);
         setActiveIndex(0);
@@ -324,7 +337,7 @@ export function InwardMaterialCombobox({
               return;
             }
             if (query.trim()) {
-              const matches = filterInwardMatches(query.trim(), items);
+              const matches = getMatchesFor(query.trim());
               if (matches.length > 0) {
                 setIsOpen(true);
                 updatePosition();
@@ -527,6 +540,7 @@ export function InwardMaterialCombobox({
 export function InwardTamilMaterialInput({
   row,
   items = [],
+  allItems = [],
   onSelectExisting,
   onChangeTamilName,
   onClear,
@@ -548,10 +562,21 @@ export function InwardTamilMaterialInput({
     }
   }, [row.nameTa, isOpen]);
 
+  // Helper to compute Tamil & English matches synchronously
+  const getTamilMatchesFor = (text) => {
+    const q = (text || '').trim();
+    if (!q) return [];
+    const directMatches = filterInwardMatches(q, items);
+    if (directMatches.length > 0 || !allItems || allItems.length === 0) {
+      return directMatches;
+    }
+    return filterInwardMatches(q, allItems);
+  };
+
   // Compute matching items based on Tamil query or English name
   const matchingItems = useMemo(() => {
-    return filterInwardMatches(query, items);
-  }, [query, items]);
+    return getTamilMatchesFor(query);
+  }, [query, items, allItems]);
 
   const updatePosition = () => {
     if (!inputRef.current) return;
@@ -622,7 +647,7 @@ export function InwardTamilMaterialInput({
     }
 
     if (trimmed) {
-      const matches = filterInwardMatches(trimmed, items);
+      const matches = getTamilMatchesFor(trimmed);
       if (matches.length > 0) {
         setIsOpen(true);
         setActiveIndex(0);
@@ -717,7 +742,7 @@ export function InwardTamilMaterialInput({
             return;
           }
           if (query.trim()) {
-            const matches = filterInwardMatches(query.trim(), items);
+            const matches = getTamilMatchesFor(query.trim());
             if (matches.length > 0) {
               setIsOpen(true);
               updatePosition();

@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { fmt, inr, exportToExcel, getMaterialDisplayName, inferTamilName, getLocalTodayYmd } from '../utils';
+import { fmt, inr, exportToExcel, getMaterialDisplayName, inferTamilName, getLocalTodayYmd, isMaterialMatch, getNextMaterialId, deduplicateItems } from '../utils';
 import Ic from '../components/Icon';
 import Pill from '../components/Pill';
 import Modal from '../components/Modal';
@@ -78,7 +78,7 @@ export default function Stock({
   });
 
   const rows = useMemo(() => {
-    return items.filter(i => {
+    const filtered = items.filter(i => {
       // Category filter
       if (cat !== 'All' && i.cat !== cat) return false;
 
@@ -96,6 +96,38 @@ export default function Stock({
 
       return true;
     });
+
+    if (q.trim()) {
+      const query = q.trim().toLowerCase();
+      filtered.sort((a, b) => {
+        const aName = (a.name || '').toLowerCase();
+        const bName = (b.name || '').toLowerCase();
+        const aTa = (a.nameTa || '').toLowerCase();
+        const bTa = (b.nameTa || '').toLowerCase();
+
+        // Exact match first
+        const aExact = aName === query || aTa === query;
+        const bExact = bName === query || bTa === query;
+        if (aExact && !bExact) return -1;
+        if (!aExact && bExact) return 1;
+
+        // Starts with query first (e.g. "NAIL 21/2" before "GI NAILS")
+        const aStarts = aName.startsWith(query) || aTa.startsWith(query);
+        const bStarts = bName.startsWith(query) || bTa.startsWith(query);
+        if (aStarts && !bStarts) return -1;
+        if (!aStarts && bStarts) return 1;
+
+        // Word boundary starts with query
+        const aWord = new RegExp('\\b' + query, 'i').test(aName);
+        const bWord = new RegExp('\\b' + query, 'i').test(bName);
+        if (aWord && !bWord) return -1;
+        if (!aWord && bWord) return 1;
+
+        return aName.localeCompare(bName);
+      });
+    }
+
+    return filtered;
   }, [items, cat, statusFilter, q]);
 
   // Reset to page 1 whenever search query, category filter, or status filter changes
@@ -144,24 +176,57 @@ export default function Stock({
       return;
     }
 
-    const id = 'SVS-' + String(items.length + 1).padStart(3, '0');
     const normName = f.name.trim().toUpperCase();
-    const newItem = {
-      id,
-      name: normName,
-      nameTa: f.nameTa?.trim() || inferTamilName(normName),
-      cat: f.cat || categories[0] || 'Steel',
-      hsn: f.hsn.trim() || '7214',
-      uom: (f.uom || uoms[0] || 'NOS').toUpperCase(),
-      recv: +f.qty || 0,
-      issued: 0,
-      min: +f.min || 0,
-      rate: +f.rate || 0,
-      gst: (f.gst !== undefined && f.gst !== '' && !isNaN(f.gst)) ? Number(f.gst) : 18,
-      last: new Date().toISOString().slice(0, 10)
-    };
+    const normNameTa = f.nameTa?.trim() || inferTamilName(normName);
+    const existingIdx = items.findIndex(i => isMaterialMatch(i, normName, normNameTa));
 
-    setItems([...items, newItem]);
+    if (existingIdx >= 0) {
+      // Existing material: update stock, rate, unit, and date instead of creating duplicate row
+      const target = items[existingIdx];
+      const addedQty = +f.qty || 0;
+      const finalUom = (f.uom && f.uom.trim()) ? f.uom.trim().toUpperCase() : (target.uom || 'NOS');
+      const updated = items.map((it, idx) => {
+        if (idx === existingIdx) {
+          return {
+            ...target,
+            name: normName || target.name,
+            nameTa: normNameTa || target.nameTa,
+            cat: f.cat || target.cat,
+            hsn: f.hsn.trim() || target.hsn,
+            uom: finalUom,
+            recv: +(Number(target.recv || 0) + addedQty).toFixed(2),
+            min: (+f.min || target.min || 0),
+            rate: +f.rate > 0 ? +f.rate : target.rate,
+            gst: (f.gst !== undefined && f.gst !== '' && !isNaN(f.gst)) ? Number(f.gst) : target.gst,
+            last: new Date().toISOString().slice(0, 10)
+          };
+        }
+        return it;
+      });
+      setItems(deduplicateItems(updated));
+      toast(`Existing material ${target.name} stock updated (+${addedQty})`);
+    } else {
+      // New material: assign safe unique ID and append
+      const id = getNextMaterialId(items);
+      const newItem = {
+        id,
+        name: normName,
+        nameTa: normNameTa,
+        cat: f.cat || categories[0] || 'Steel',
+        hsn: f.hsn.trim() || '7214',
+        uom: (f.uom || uoms[0] || 'NOS').toUpperCase(),
+        recv: +f.qty || 0,
+        issued: 0,
+        min: +f.min || 0,
+        rate: +f.rate || 0,
+        gst: (f.gst !== undefined && f.gst !== '' && !isNaN(f.gst)) ? Number(f.gst) : 18,
+        last: new Date().toISOString().slice(0, 10)
+      };
+
+      setItems(deduplicateItems([...items, newItem]));
+      toast(`Material ${newItem.name} added to stock inventory`);
+    }
+
     setAdd(false);
     setF({
       name: '',
@@ -174,7 +239,6 @@ export default function Stock({
       rate: '',
       gst: 18
     });
-    toast(`Material ${newItem.name} added to stock inventory`);
   };
 
   // CRUD: Start Edit
@@ -201,7 +265,7 @@ export default function Stock({
     }
 
     const normName = editItem.name.trim().toUpperCase();
-    setItems(items.map(item => {
+    const updated = items.map(item => {
       if (item.id === editItem.id) {
         return {
           ...item,
@@ -218,7 +282,8 @@ export default function Stock({
         };
       }
       return item;
-    }));
+    });
+    setItems(deduplicateItems(updated));
 
     const updatedName = editItem.name;
     setEditItem(null);

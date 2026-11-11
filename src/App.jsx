@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import LOGO from './assets/logo.png';
-import { KEY, AUTH_KEY, load, seed, DEFAULT_CATEGORIES_LIST, DEFAULT_UOMS_LIST, DEFAULT_SETTINGS } from './utils';
+import { KEY, AUTH_KEY, load, seed, DEFAULT_CATEGORIES_LIST, DEFAULT_UOMS_LIST, DEFAULT_SETTINGS, isMaterialMatch, deduplicateItems } from './utils';
 import Ic, { RingSpinner } from './components/Icon';
 import BillLightbox from './components/BillLightbox';
 import InwardEntryModal from './components/InwardEntryModal';
@@ -112,89 +112,144 @@ export default function App() {
   // Calculate live stock dynamically: recv - current bills total
   const billed = useMemo(() => {
     const m = {};
-    bills.forEach(b => (b.rows || []).forEach(r => {
-      const deduct = r.stockDeductQty !== undefined
-        ? Number(r.stockDeductQty || 0)
-        : (r.weightInKg !== undefined && r.weightInKg !== null && Number(r.weightInKg) > 0 ? Number(r.weightInKg) : (Number(r.qty) || 0));
-      m[r.id] = +((m[r.id] || 0) + deduct).toFixed(3);
+    bills.forEach(b => (b.rows || b.items || []).forEach(r => {
+      if (!r) return;
+      const deduct = (r.stockDeductQty !== undefined && r.stockDeductQty !== null && Number(r.stockDeductQty) > 0)
+        ? Number(r.stockDeductQty)
+        : (r.weightInKg !== undefined && r.weightInKg !== null && Number(r.weightInKg) > 0
+            ? Number(r.weightInKg)
+            : (r.weight !== undefined && r.weight !== null && Number(r.weight) > 0
+                ? Number(r.weight)
+                : Number(r.qty || 0)));
+      if (r.id) {
+        m[r.id] = +((m[r.id] || 0) + deduct).toFixed(3);
+      }
     }));
     return m;
   }, [bills]);
 
-  const E = useMemo(() => items.map(i => {
-    const totalIssued = (billed[i.id] || 0);
-    const s = +(Number(i.recv || 0) - totalIssued).toFixed(2);
+  const E = useMemo(() => {
+    // Sort inward invoices from newest to oldest
+    const sortedInward = [...inwardInvoices].sort((a, b) => {
+      const da = a.date || '';
+      const db = b.date || '';
+      if (db !== da) return db.localeCompare(da);
+      return (b.id || '').localeCompare(a.id || '');
+    });
 
-    // Look for the rate and tax rate recorded in the latest inward invoice for this item
-    let inwardGst = null;
-    let latestInwardRate = null;
-    for (const inv of inwardInvoices) {
-      const found = (inv.items || []).find(it =>
-        (it.id && i.id && it.id === i.id) ||
-        (it.name || '').trim().toUpperCase() === (i.name || '').trim().toUpperCase()
-      );
-      if (found) {
-        if (latestInwardRate === null && found.rate !== undefined && found.rate !== null && found.rate !== '' && !isNaN(found.rate) && Number(found.rate) > 0) {
-          latestInwardRate = Number(found.rate);
-        }
-        const val = (found.taxPct !== undefined && found.taxPct !== null && found.taxPct !== '' && !isNaN(found.taxPct))
-          ? Number(found.taxPct)
-          : ((found.gst !== undefined && found.gst !== null && found.gst !== '' && !isNaN(found.gst)) ? Number(found.gst) : null);
-        if (val !== null && inwardGst === null) {
-          inwardGst = val;
-        }
-        if (latestInwardRate !== null && inwardGst !== null) {
-          break;
+    return items.map(i => {
+      // Calculate total issued: match on id or material name across all issued bills
+      let totalIssued = 0;
+      bills.forEach(b => {
+        const rowList = b.rows || b.items || [];
+        rowList.forEach(r => {
+          if (!r) return;
+          const isMatch = (r.id && i.id && r.id === i.id) || isMaterialMatch(i, r.name || r.rawName || r.nameEn, r.nameTa, r.id);
+          if (isMatch) {
+            const deduct = (r.stockDeductQty !== undefined && r.stockDeductQty !== null && Number(r.stockDeductQty) > 0)
+              ? Number(r.stockDeductQty)
+              : (r.weightInKg !== undefined && r.weightInKg !== null && Number(r.weightInKg) > 0
+                  ? Number(r.weightInKg)
+                  : (r.weight !== undefined && r.weight !== null && Number(r.weight) > 0 && (i.uom === 'KGS' || r.uom === 'KGS')
+                      ? Number(r.weight)
+                      : Number(r.qty || 0)));
+            totalIssued += deduct;
+          }
+        });
+      });
+      totalIssued = +totalIssued.toFixed(3);
+      const s = Math.max(0, +(Number(i.recv || 0) - totalIssued).toFixed(2));
+
+      // Look for the rate, tax rate, and uom recorded in the latest inward invoice for this item
+      let inwardGst = null;
+      let latestInwardRate = null;
+      let latestInwardUom = null;
+      for (const inv of sortedInward) {
+        const found = (inv.items || []).find(it => isMaterialMatch(i, it.name, it.nameTa, it.id));
+        if (found) {
+          if (latestInwardRate === null && found.rate !== undefined && found.rate !== null && found.rate !== '' && !isNaN(found.rate) && Number(found.rate) > 0) {
+            latestInwardRate = Number(found.rate);
+          }
+          if (latestInwardUom === null && found.uom && found.uom.trim()) {
+            latestInwardUom = found.uom.trim();
+          }
+          const val = (found.taxPct !== undefined && found.taxPct !== null && found.taxPct !== '' && !isNaN(found.taxPct))
+            ? Number(found.taxPct)
+            : ((found.gst !== undefined && found.gst !== null && found.gst !== '' && !isNaN(found.gst)) ? Number(found.gst) : null);
+          if (val !== null && inwardGst === null) {
+            inwardGst = val;
+          }
+          if (latestInwardRate !== null && inwardGst !== null && latestInwardUom !== null) {
+            break;
+          }
         }
       }
-    }
 
-    // Determine accurate purchase rate (without GST):
-    // If inward invoices exist for this item, the latest remaining inward invoice rate is the ground truth
-    const rateWithoutGst = (latestInwardRate !== null && latestInwardRate > 0)
-      ? latestInwardRate
-      : (Number(i.rate) || 0);
+      // Determine accurate purchase rate (without GST):
+      // If inward invoices exist for this item, the latest remaining inward invoice rate is the ground truth
+      const rateWithoutGst = (latestInwardRate !== null && latestInwardRate > 0)
+        ? latestInwardRate
+        : (Number(i.rate) || 0);
 
-    // Determine accurate GST rate (including 0%)
-    let gstPct = 18;
-    if (i.gst !== undefined && i.gst !== null && i.gst !== '' && !isNaN(i.gst) && Number(i.gst) !== 18) {
-      gstPct = Number(i.gst);
-    } else if (inwardGst !== null) {
-      gstPct = inwardGst;
-    } else if (i.gst !== undefined && i.gst !== null && i.gst !== '' && !isNaN(i.gst)) {
-      gstPct = Number(i.gst);
-    }
+      // Determine accurate GST rate (including 0%)
+      let gstPct = 18;
+      if (i.gst !== undefined && i.gst !== null && i.gst !== '' && !isNaN(i.gst) && Number(i.gst) !== 18) {
+        gstPct = Number(i.gst);
+      } else if (inwardGst !== null) {
+        gstPct = inwardGst;
+      } else if (i.gst !== undefined && i.gst !== null && i.gst !== '' && !isNaN(i.gst)) {
+        gstPct = Number(i.gst);
+      }
 
-    const rateWithGst = +(rateWithoutGst * (1 + gstPct / 100)).toFixed(2);
-    return {
-      ...i,
-      rate: rateWithoutGst,
-      gst: gstPct,
-      rateWithoutGst,
-      rateWithGst,
-      issued: totalIssued,
-      stock: s,
-      status: s <= 0 ? 'out' : s <= i.min ? 'low' : 'ok'
-    };
-  }), [items, billed, inwardInvoices]);
+      const rateWithGst = +(rateWithoutGst * (1 + gstPct / 100)).toFixed(2);
+      const finalUom = (i.uom && i.uom !== 'NOS') ? i.uom : (latestInwardUom || i.uom || 'NOS');
+
+      const minThreshold = (i.min !== undefined && i.min !== null && !isNaN(i.min) && Number(i.min) > 0)
+        ? Number(i.min)
+        : Math.max(1, Math.ceil(Number(i.recv || 0) * 0.15));
+      const status = s <= 0 ? 'out' : s <= minThreshold ? 'low' : 'ok';
+
+      return {
+        ...i,
+        uom: finalUom,
+        rate: rateWithoutGst,
+        gst: gstPct,
+        rateWithoutGst,
+        rateWithGst,
+        issued: totalIssued,
+        stock: s,
+        min: minThreshold,
+        status
+      };
+    });
+  }, [items, bills, inwardInvoices]);
 
   // Automatically reconcile item purchase rates and GST with inward invoices
-  // (e.g. when an inward bill is deleted, items revert back to the previous bill's rate)
+  // (e.g. when an inward bill is deleted, items revert back to the previous bill's rate, uom, and last date)
   useEffect(() => {
     let changed = false;
+    const sortedInward = [...inwardInvoices].sort((a, b) => {
+      const da = a.date || '';
+      const db = b.date || '';
+      if (db !== da) return db.localeCompare(da);
+      return (b.id || '').localeCompare(a.id || '');
+    });
+
     const reconciled = items.map(item => {
       let latestRate = null;
       let latestGst = null;
       let latestDate = null;
-      for (const inv of inwardInvoices) {
-        const found = (inv.items || []).find(it =>
-          (it.id && item.id && it.id === item.id) ||
-          (it.name || '').trim().toUpperCase() === (item.name || '').trim().toUpperCase()
-        );
+      let latestUom = null;
+
+      for (const inv of sortedInward) {
+        const found = (inv.items || []).find(it => isMaterialMatch(item, it.name, it.nameTa, it.id));
         if (found) {
           if (latestRate === null && found.rate !== undefined && found.rate !== null && !isNaN(found.rate) && Number(found.rate) > 0) {
             latestRate = Number(found.rate);
             latestDate = inv.date;
+          }
+          if (latestUom === null && found.uom && found.uom.trim()) {
+            latestUom = found.uom.trim();
           }
           const val = (found.taxPct !== undefined && found.taxPct !== null && found.taxPct !== '' && !isNaN(found.taxPct))
             ? Number(found.taxPct)
@@ -202,15 +257,21 @@ export default function App() {
           if (val !== null && latestGst === null) {
             latestGst = val;
           }
-          if (latestRate !== null && latestGst !== null) break;
+          if (latestRate !== null && latestGst !== null && latestUom !== null) break;
         }
       }
 
-      if (latestRate !== null && Number(item.rate) !== latestRate) {
+      const needsRateUpdate = latestRate !== null && Number(item.rate) !== latestRate;
+      const needsUomUpdate = latestUom !== null && item.uom !== latestUom && item.uom === 'NOS';
+      const needsDateUpdate = latestDate && item.last !== latestDate;
+      const needsGstUpdate = latestGst !== null && item.gst !== latestGst;
+
+      if (needsRateUpdate || needsUomUpdate || needsDateUpdate || needsGstUpdate) {
         changed = true;
         return {
           ...item,
-          rate: latestRate,
+          ...(latestRate !== null ? { rate: latestRate } : {}),
+          ...(latestUom !== null && (item.uom === 'NOS' || !item.uom) ? { uom: latestUom } : {}),
           ...(latestGst !== null ? { gst: latestGst } : {}),
           ...(latestDate ? { last: latestDate } : {})
         };
@@ -219,7 +280,7 @@ export default function App() {
     });
 
     if (changed) {
-      setItems(reconciled);
+      setItems(deduplicateItems(reconciled));
     }
   }, [inwardInvoices]);
 
@@ -244,7 +305,7 @@ export default function App() {
   };
 
   const it = sel && E.find(i => i.id === sel);
-  const saveItems = arr => setItems(arr.map(({ stock, status, ...r }) => r));
+  const saveItems = arr => setItems(deduplicateItems(arr.map(({ stock, status, ...r }) => r)));
 
   const reset = () => {
     const s = seed();

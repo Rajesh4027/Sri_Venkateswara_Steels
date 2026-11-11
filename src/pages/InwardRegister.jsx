@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { fmt, inr, dt, exportToExcel, getMaterialDisplayName, getLocalTodayYmd } from '../utils';
+import { fmt, inr, dt, exportToExcel, getMaterialDisplayName, getLocalTodayYmd, isMaterialMatch, deduplicateItems } from '../utils';
 import Ic from '../components/Icon';
 import BillLightbox from '../components/BillLightbox';
 import Modal from '../components/Modal';
@@ -221,14 +221,19 @@ export default function InwardRegister({
     // Remaining invoices after this deletion
     const remainingInvoices = inwardInvoices.filter(i => i.id !== deleteTarget.id);
 
-    // Reconcile and deduct received stock, and revert rate/gst/last date to the previous remaining inward invoice
-    let updatedItems = [...items];
+    // Sort remaining invoices by date descending to find the newest remaining entry
+    const sortedRemaining = [...remainingInvoices].sort((a, b) => {
+      const da = a.date || '';
+      const db = b.date || '';
+      if (db !== da) return db.localeCompare(da);
+      return (b.id || '').localeCompare(a.id || '');
+    });
+
+    // Reconcile and deduct received stock, and revert rate/gst/uom/last date to the previous remaining inward invoice
+    let updatedItems = deduplicateItems([...items]);
     (deleteTarget.items || []).forEach(it => {
       const oldQty = Number(it.qty) || 0;
-      const idx = updatedItems.findIndex(i =>
-        (it.id && i.id === it.id) ||
-        i.name.toUpperCase() === (it.name || '').trim().toUpperCase()
-      );
+      const idx = updatedItems.findIndex(i => isMaterialMatch(i, it.name, it.nameTa, it.id));
       if (idx >= 0) {
         const cur = updatedItems[idx];
         const newRecv = Math.max(0, +(Number(cur.recv || 0) - oldQty).toFixed(2));
@@ -236,11 +241,8 @@ export default function InwardRegister({
         // Find the most recent remaining inward invoice that contains this item
         let prevInwardItem = null;
         let prevInvoiceDate = '';
-        for (const inv of remainingInvoices) {
-          const match = (inv.items || []).find(r =>
-            (r.id && cur.id && r.id === cur.id) ||
-            (r.name || '').trim().toUpperCase() === (cur.name || '').trim().toUpperCase()
-          );
+        for (const inv of sortedRemaining) {
+          const match = (inv.items || []).find(r => isMaterialMatch(cur, r.name, r.nameTa, r.id));
           if (match) {
             prevInwardItem = match;
             prevInvoiceDate = inv.date;
@@ -251,10 +253,14 @@ export default function InwardRegister({
         let newRate = cur.rate;
         let newGst = cur.gst;
         let newLast = cur.last;
+        let newUom = cur.uom;
 
         if (prevInwardItem) {
           if (prevInwardItem.rate !== undefined && prevInwardItem.rate !== null && !isNaN(prevInwardItem.rate) && Number(prevInwardItem.rate) > 0) {
             newRate = Number(prevInwardItem.rate);
+          }
+          if (prevInwardItem.uom && prevInwardItem.uom.trim()) {
+            newUom = prevInwardItem.uom.trim();
           }
           const prevTax = prevInwardItem.taxPct !== undefined ? prevInwardItem.taxPct : prevInwardItem.gst;
           if (prevTax !== undefined && prevTax !== null && !isNaN(prevTax)) {
@@ -269,13 +275,14 @@ export default function InwardRegister({
           ...cur,
           recv: newRecv,
           rate: newRate,
+          uom: newUom,
           gst: newGst,
           last: newLast
         };
       }
     });
 
-    setItems(updatedItems);
+    setItems(deduplicateItems(updatedItems));
     setInwardInvoices(remainingInvoices);
 
     const deletedInvNum = deleteTarget.inv;

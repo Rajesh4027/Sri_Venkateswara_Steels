@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import Ic from '../components/Icon';
 import { InwardMaterialCombobox, InwardTamilMaterialInput } from '../components/MaterialCombobox';
-import { fmt, inr, dt, getSupplierMaterials, getMaterialDisplayName, inferTamilName, formatTitleCase, DEFAULT_CATEGORIES_LIST, DEFAULT_UOMS_LIST } from '../utils';
+import { fmt, inr, dt, getSupplierMaterials, getMaterialDisplayName, inferTamilName, formatTitleCase, DEFAULT_CATEGORIES_LIST, DEFAULT_UOMS_LIST, isMaterialMatch, getNextMaterialId, deduplicateItems } from '../utils';
 import { COMMON_HSN_CODES, COMMON_UOMS } from '../data/categories';
 import { useTranslation } from '../context/LanguageContext';
 
@@ -257,17 +257,13 @@ export default function InwardEntryPage({
       return;
     }
 
-    let updatedItems = [...items];
-    let nextCodeNum = items.length + 1;
+    let updatedItems = deduplicateItems([...items]);
 
     // If editing existing invoice, first roll back the old received quantities from this invoice
     if (editingInvoice && editingInvoice.items) {
       editingInvoice.items.forEach(oldIt => {
         const oldQty = Number(oldIt.qty) || 0;
-        const matchIdx = updatedItems.findIndex(i =>
-          (oldIt.id && i.id === oldIt.id) ||
-          (i.name && i.name.toUpperCase() === (oldIt.name || '').trim().toUpperCase())
-        );
+        const matchIdx = updatedItems.findIndex(i => isMaterialMatch(i, oldIt.name, oldIt.nameTa, oldIt.id));
         if (matchIdx >= 0) {
           const target = updatedItems[matchIdx];
           updatedItems[matchIdx] = {
@@ -286,28 +282,20 @@ export default function InwardEntryPage({
 
       const normName = hasEn ? row.name.trim().toUpperCase() : row.nameTa.trim();
       const normNameTa = hasTa ? row.nameTa.trim() : '';
-      let matchIdx = -1;
-
-      if (row.id) {
-        matchIdx = updatedItems.findIndex(i => i.id === row.id);
-      }
-      if (matchIdx === -1 && normName) {
-        matchIdx = updatedItems.findIndex(i => (i.name || '').toUpperCase() === normName);
-      }
-      if (matchIdx === -1 && normNameTa) {
-        matchIdx = updatedItems.findIndex(i => (i.nameTa || '').trim().toLowerCase() === normNameTa.toLowerCase());
-      }
+      const matchIdx = updatedItems.findIndex(i => isMaterialMatch(i, normName, normNameTa, row.id));
 
       if (matchIdx >= 0) {
-        // Existing material -> increase received stock, update rate, hsn, gst, and update both names!
+        // Existing material -> increase received stock, update unit, rate, hsn, gst, and sync names
         const target = updatedItems[matchIdx];
         const rowGst = (row.gst !== undefined && row.gst !== '' && !isNaN(row.gst))
           ? Number(row.gst)
           : (target.gst !== undefined ? Number(target.gst) : 18);
+        const finalUom = (row.uom && row.uom.trim()) ? row.uom.trim() : (target.uom || 'NOS');
         updatedItems[matchIdx] = {
           ...target,
           name: normName || target.name,
           nameTa: normNameTa || target.nameTa || '',
+          uom: finalUom,
           recv: +(Number(target.recv || 0) + Number(row.qty)).toFixed(2),
           rate: Number(row.rate) > 0 ? Number(row.rate) : target.rate,
           last: invDate,
@@ -316,8 +304,8 @@ export default function InwardEntryPage({
           gst: rowGst
         };
       } else {
-        // New material -> create unified stock item with BOTH English & Tamil names!
-        const newId = 'SVS-' + String(nextCodeNum++).padStart(3, '0');
+        // New material -> create unified stock item with safe unique ID!
+        const newId = getNextMaterialId(updatedItems);
         const rowGst = (row.gst !== undefined && row.gst !== '' && !isNaN(row.gst))
           ? Number(row.gst)
           : 18;
@@ -338,7 +326,7 @@ export default function InwardEntryPage({
       }
     });
 
-    setItems(updatedItems);
+    setItems(deduplicateItems(updatedItems));
 
     const invoicePayload = {
       id: editingInvoice ? editingInvoice.id : ('INV-' + Date.now()),
@@ -821,6 +809,7 @@ export default function InwardEntryPage({
                           <InwardMaterialCombobox
                             row={row}
                             items={displayItems}
+                            allItems={items}
                             onSelectExisting={it => {
                               const autoTa = it.nameTa || it.tamilName || inferTamilName(it.name) || '';
                               setRow(idx, {
@@ -880,6 +869,7 @@ export default function InwardEntryPage({
                           <InwardTamilMaterialInput
                             row={row}
                             items={displayItems}
+                            allItems={items}
                             onSelectExisting={it => {
                               const autoTa = it.nameTa || it.tamilName || inferTamilName(it.name) || '';
                               setRow(idx, {

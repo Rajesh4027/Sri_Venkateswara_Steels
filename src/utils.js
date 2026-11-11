@@ -278,6 +278,118 @@ export function enrichItem(i) {
   return { ...i, cat, hsn, nameTa, ...(gst !== undefined ? { gst } : {}) };
 }
 
+export function normalizeMaterialName(str) {
+  if (!str) return '';
+  return String(str)
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, ' ')
+    .replace(/\bNAILS\b/g, 'NAIL')
+    .replace(/\bSCREWS\b/g, 'SCREW')
+    .replace(/\bPIPES\b/g, 'PIPE')
+    .replace(/\bPLATES\b/g, 'PLATE')
+    .replace(/\bRODS\b/g, 'ROD')
+    .replace(/\bSHEETS\b/g, 'SHEET');
+}
+
+export function isMaterialMatch(item, queryName, queryTa, queryId) {
+  if (!item) return false;
+
+  const itemNormEn = normalizeMaterialName(item.name);
+  const qNormEn = normalizeMaterialName(queryName);
+
+  // 1. Direct normalized name match (e.g. "NAIL 21/2" === "NAIL 21/2")
+  if (itemNormEn && qNormEn && itemNormEn === qNormEn) return true;
+
+  // 2. Compare compact alphanumeric string (handling fractions e.g. "21/2" vs "2 1/2" or "NAILS" vs "NAIL")
+  const itemCompact = itemNormEn.replace(/[\s\-_/]/g, '');
+  const qCompact = qNormEn.replace(/[\s\-_/]/g, '');
+  if (itemCompact && qCompact && itemCompact === qCompact) return true;
+
+  // 3. Compare Tamil name
+  const itemNormTa = (item.nameTa || item.tamilName || '').trim().toLowerCase();
+  const qNormTa = (queryTa || '').trim().toLowerCase();
+  if (itemNormTa && qNormTa && itemNormTa === qNormTa) return true;
+
+  // 4. If queryId is provided and matches item.id
+  if (queryId && item.id && item.id === queryId) {
+    // If both have names and they are completely different materials, this was a legacy ID collision
+    if (qNormEn && itemNormEn && itemCompact !== qCompact) {
+      return false;
+    }
+    return true;
+  }
+
+  return false;
+}
+
+export function getNextMaterialId(items = []) {
+  let maxNum = 0;
+  (items || []).forEach(it => {
+    if (it && it.id && typeof it.id === 'string') {
+      const m = it.id.match(/SVS-(\d+)/i);
+      if (m) {
+        const num = parseInt(m[1], 10);
+        if (!isNaN(num) && num > maxNum) {
+          maxNum = num;
+        }
+      }
+    }
+  });
+  return 'SVS-' + String(maxNum + 1).padStart(3, '0');
+}
+
+export function deduplicateItems(items = []) {
+  if (!Array.isArray(items) || items.length === 0) return [];
+  const result = [];
+  const seenIds = new Set();
+
+  for (const item of items) {
+    if (!item) continue;
+    const matchIdx = result.findIndex(existing =>
+      isMaterialMatch(existing, item.name, item.nameTa || item.tamilName, item.id)
+    );
+
+    if (matchIdx >= 0) {
+      const existing = result[matchIdx];
+      // Merge duplicate item into existing: prefer non-NOS UOM (e.g. KGS over default NOS)
+      const preferredUom = (item.uom && item.uom.toUpperCase() !== 'NOS')
+        ? item.uom.toUpperCase()
+        : (existing.uom && existing.uom.toUpperCase() !== 'NOS' ? existing.uom : (item.uom || 'NOS'));
+
+      const latestRate = Number(item.rate) > 0 ? Number(item.rate) : Number(existing.rate || 0);
+      const latestLast = (item.last && (!existing.last || item.last >= existing.last)) ? item.last : existing.last;
+      const combinedRecv = +(Number(existing.recv || 0) + Number(item.recv || 0)).toFixed(2);
+      const combinedIssued = +(Number(existing.issued || 0) + Number(item.issued || 0)).toFixed(2);
+      const maxMin = Math.max(Number(existing.min || 0), Number(item.min || 0)) || Math.ceil((combinedRecv || 0) * 0.15);
+
+      result[matchIdx] = {
+        ...existing,
+        name: existing.name || item.name,
+        nameTa: existing.nameTa || item.nameTa || item.tamilName || '',
+        cat: existing.cat || item.cat || 'Steel',
+        hsn: (item.hsn && item.hsn !== '7214' ? item.hsn : (existing.hsn || item.hsn || '7413')),
+        uom: preferredUom,
+        recv: combinedRecv,
+        issued: combinedIssued,
+        min: maxMin,
+        rate: latestRate,
+        gst: item.gst !== undefined ? item.gst : existing.gst,
+        last: latestLast
+      };
+    } else {
+      let safeId = item.id;
+      if (!safeId || seenIds.has(safeId)) {
+        safeId = getNextMaterialId(result);
+      }
+      seenIds.add(safeId);
+      result.push({ ...item, id: safeId });
+    }
+  }
+
+  return result;
+}
+
 export const DEFAULT_SETTINGS = {
   storeName: 'Sri Venkateswara Steels',
   address: 'No. 42, Steel Trunk Road, Near New Bypass Bridge,\nTheni – 625 531, Theni (Dt), Tamil Nadu',
@@ -372,7 +484,7 @@ export const load = () => {
     const defaultSeedUsers = seed().users;
 
     return {
-      items: (data.items || []).map(enrichItem),
+      items: deduplicateItems((data.items || []).map(enrichItem)),
       bills: data.bills || [],
       inwardInvoices: data.inwardInvoices || [],
       categories: Array.isArray(data.categories) && data.categories.length > 0

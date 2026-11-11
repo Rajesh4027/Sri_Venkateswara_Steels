@@ -265,6 +265,7 @@ export const translations = {
     totalInvoiceValue: 'Total Invoice Value',
     viewAction: 'View',
     editAction: 'Edit',
+    deleteAction: 'Delete',
     productsCount: '{n} Product(s):',
 
     // Inward Stock Update & Supplier Bill Entry Page
@@ -725,6 +726,7 @@ export const translations = {
     totalInvoiceValue: 'மொத்த பில் தொகை',
     viewAction: 'பார்',
     editAction: 'திருத்து',
+    deleteAction: 'நீக்கு',
     productsCount: '{n} பொருட்கள்:',
 
     // Inward Stock Update & Supplier Bill Entry Page

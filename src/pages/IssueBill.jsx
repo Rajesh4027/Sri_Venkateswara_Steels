@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef, Fragment } from 'react';
 import LOGO from '../assets/logo.png';
-import { fmt, inr, dt, amountInWords, DEFAULT_UOMS_LIST, DEFAULT_SETTINGS, formatCustomerName, formatTitleCase, getMaterialDisplayName, inferTamilName, getLocalTodayYmd, downloadInvoiceHtml } from '../utils';
+import { fmt, inr, dt, amountInWords, DEFAULT_UOMS_LIST, DEFAULT_SETTINGS, formatCustomerName, formatTitleCase, getMaterialDisplayName, inferTamilName, getLocalTodayYmd, downloadInvoiceHtml, isMaterialMatch } from '../utils';
 import Ic from '../components/Icon';
 import { IssueMaterialCombobox } from '../components/MaterialCombobox';
 import CustomerAutofillInput from '../components/CustomerCombobox';
@@ -696,11 +696,29 @@ export default function IssueBill({ items, bills, setBills, setItems, preset, to
       const oldRows = editingBill.rows || [];
       const updatedItems = items.map(item => {
         const oldDeduct = oldRows
-          .filter(r => r.id === item.id)
-          .reduce((sum, r) => sum + Number(r.stockDeductQty !== undefined ? r.stockDeductQty : (r.qty || 0)), 0);
+          .filter(r => (r.id && item.id && r.id === item.id) || isMaterialMatch(item, r.name || r.rawName || r.nameEn, r.nameTa, r.id))
+          .reduce((sum, r) => {
+            const deduct = (r.stockDeductQty !== undefined && r.stockDeductQty !== null && Number(r.stockDeductQty) > 0)
+              ? Number(r.stockDeductQty)
+              : (r.weightInKg !== undefined && r.weightInKg !== null && Number(r.weightInKg) > 0
+                  ? Number(r.weightInKg)
+                  : (r.weight !== undefined && r.weight !== null && Number(r.weight) > 0 && (item.uom === 'KGS' || r.uom === 'KGS')
+                      ? Number(r.weight)
+                      : Number(r.qty || 0)));
+            return sum + deduct;
+          }, 0);
         const newDeduct = k.rows
-          .filter(r => r.id === item.id)
-          .reduce((sum, r) => sum + Number(r.stockDeductQty !== undefined ? r.stockDeductQty : (r.qty || 0)), 0);
+          .filter(r => (r.id && item.id && r.id === item.id) || isMaterialMatch(item, r.name || r.rawName || r.nameEn, r.nameTa, r.id))
+          .reduce((sum, r) => {
+            const deduct = (r.stockDeductQty !== undefined && r.stockDeductQty !== null && Number(r.stockDeductQty) > 0)
+              ? Number(r.stockDeductQty)
+              : (r.weightInKg !== undefined && r.weightInKg !== null && Number(r.weightInKg) > 0
+                  ? Number(r.weightInKg)
+                  : (r.weight !== undefined && r.weight !== null && Number(r.weight) > 0 && (item.uom === 'KGS' || r.uom === 'KGS')
+                      ? Number(r.weight)
+                      : Number(r.qty || 0)));
+            return sum + deduct;
+          }, 0);
         const delta = newDeduct - oldDeduct;
         return {
           ...item,
@@ -720,9 +738,18 @@ export default function IssueBill({ items, bills, setBills, setItems, preset, to
 
       // 2. Minimize / deduct stock on items using cumulative sum for each product
       const updatedItems = items.map(item => {
-        const itemRows = k.rows.filter(r => r.id === item.id);
+        const itemRows = k.rows.filter(r => (r.id && item.id && r.id === item.id) || isMaterialMatch(item, r.name || r.rawName || r.nameEn, r.nameTa, r.id));
         if (itemRows.length > 0) {
-          const totalDeduct = itemRows.reduce((sum, r) => sum + Number(r.stockDeductQty !== undefined ? r.stockDeductQty : (r.qty || 0)), 0);
+          const totalDeduct = itemRows.reduce((sum, r) => {
+            const deduct = (r.stockDeductQty !== undefined && r.stockDeductQty !== null && Number(r.stockDeductQty) > 0)
+              ? Number(r.stockDeductQty)
+              : (r.weightInKg !== undefined && r.weightInKg !== null && Number(r.weightInKg) > 0
+                  ? Number(r.weightInKg)
+                  : (r.weight !== undefined && r.weight !== null && Number(r.weight) > 0 && (item.uom === 'KGS' || r.uom === 'KGS')
+                      ? Number(r.weight)
+                      : Number(r.qty || 0)));
+            return sum + deduct;
+          }, 0);
           return {
             ...item,
             stock: Math.max(0, +(Number(item.stock || 0) - totalDeduct).toFixed(3)),
